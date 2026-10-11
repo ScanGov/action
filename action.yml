@@ -33,9 +33,9 @@ inputs:
     description: Path to a baseline file of accepted findings.
     required: false
   fail-on:
-    description: Comma-separated finding categories that fail the job.
+    description: Comma-separated ScanGov topics (accessibility, usability, botability, security) whose failing attributes count as findings.
     required: false
-    default: accessibility,files,metadata,schema
+    default: accessibility
   with-cls:
     description: Run the Lighthouse performance category to get a lab CLS reading.
     required: false

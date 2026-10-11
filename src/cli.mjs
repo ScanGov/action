@@ -17,7 +17,8 @@ import path from 'node:path';
 import { serve } from './serve.mjs';
 import { enumeratePages } from './pages.mjs';
 import { LighthouseRunner } from './lighthouse.mjs';
-import { summarize, writeReports } from './report.mjs';
+import { writeReports } from './report.mjs';
+import { buildPageAudit, scorePageAudit, TOPICS } from './core/audit.mjs';
 
 const EXIT_CLEAN = 0;
 const EXIT_FINDINGS = 1;
@@ -33,7 +34,7 @@ const USAGE = `Usage: scangov (--site-dir <dir> | --base-url <url>) [options]
   --max-pages <n>             Cap on pages per run (default 200)
   --scangov-domain <host>     Domain known to ScanGov, enables production lookup
   --baseline <file>           Accepted findings file
-  --fail-on <a,b>             Finding categories that fail the run
+  --fail-on <topics>          Topics whose failing attributes count as findings (default accessibility)
   --with-cls                  Include the Lighthouse performance category
   --block                     Exit 1 on findings (default: report only, exit 0)
   --report-dir <dir>          Where to write reports (default scangov-report)
@@ -65,7 +66,7 @@ async function main() {
       'max-pages': { type: 'string', default: '200' },
       'scangov-domain': { type: 'string' },
       'baseline': { type: 'string' },
-      'fail-on': { type: 'string', default: 'accessibility,files,metadata,schema' },
+      'fail-on': { type: 'string', default: 'accessibility' },
       'with-cls': { type: 'boolean', default: false },
       'block': { type: 'boolean', default: false },
       'report-dir': { type: 'string', default: 'scangov-report' },
@@ -76,6 +77,10 @@ async function main() {
     allowNegative: true
   });
   let blocking = args.block;
+  let failOn = args['fail-on'].split(',').map(t => t.trim()).filter(Boolean);
+  for (let t of failOn) {
+    if (!TOPICS.includes(t)) fail(`--fail-on topic "${t}" is not one of ${TOPICS.join(', ')}`);
+  }
 
   if (args.help) {
     console.log(USAGE);
@@ -147,11 +152,21 @@ async function main() {
     for (let page of pages) {
       process.stdout.write(`scangov: auditing ${page.path} ... `);
       try {
+        let html = await fetchHtml(page.url);
         let lhr = await runner.audit(page.url);
         await writeFile(path.join(reportDir, 'lhr', slug(page.path) + '.json'), JSON.stringify(lhr));
-        let summary = summarize(lhr);
-        results.push({ ...page, status: 'ok', ...summary });
-        console.log(`a11y ${summary.categories.accessibility ?? '-'} seo ${summary.categories.seo ?? '-'} bp ${summary.categories['best-practices'] ?? '-'}`);
+        let audit = buildPageAudit({ lhr, html, performance: args['with-cls'] });
+        if (args['with-cls']) {
+          // Only the layout-shift reading is meaningful on a runner; the
+          // other lab timings are dropped rather than reported as failures.
+          for (let k of ['fcp', 'lcp', 'ttfb', 'inp']) delete audit.usability.attributes[k];
+        }
+        let scores = scorePageAudit(audit);
+        let readability = audit.readabilityInfo?.words
+          ? { ari: round1(audit.readabilityInfo.automatedReadabilityIndex), fleschKincaidGrade: audit.readabilityInfo.fleschKincaidGrade, words: audit.readabilityInfo.words, sentences: audit.readabilityInfo.sentences }
+          : null;
+        results.push({ ...page, status: 'ok', finalUrl: audit.finalUrl, lang: audit.lang, scores, readability, attributes: Object.fromEntries(TOPICS.map(t => [t, audit[t].attributes])) });
+        console.log(TOPICS.map(t => `${t} ${scores[t].score ?? '-'}`).join(', '));
       } catch (error) {
         results.push({ ...page, status: 'error', error: error.message });
         console.log(`error: ${error.message}`);
@@ -162,16 +177,22 @@ async function main() {
     await server?.close();
   }
 
-  // Until ScanGov attributes arrive from the shared core package, the only
-  // finding that can fail a run is a page Lighthouse could not audit.
+  // A finding is a failing attribute in a --fail-on topic, or a page that
+  // could not be audited at all.
   let errored = results.filter(r => r.status === 'error').length;
-  let outcome = errored > 0 ? 'findings' : 'clean';
+  let failing = 0;
+  for (let r of results) {
+    if (r.status !== 'ok') continue;
+    for (let t of failOn) failing += Object.values(r.scores[t].attributes).filter(v => !v).length;
+  }
+  let findings = errored + failing;
+  let outcome = findings > 0 ? 'findings' : 'clean';
   let exitCode = outcome === 'findings' && blocking ? EXIT_FINDINGS : EXIT_CLEAN;
-  let result = { outcome, findings: errored, blocking, exitCode };
+  let result = { outcome, findings, pageErrors: errored, failOn, blocking, exitCode };
 
   await writeReports(reportDir, { ...manifest, lighthouseVersion: runner.version, result, pages: results });
 
-  console.log(`scangov: report written to ${reportDir} (${results.length} pages, ${errored} errors)`);
+  console.log(`scangov: report written to ${reportDir} (${results.length} pages, ${failing} failing attributes in ${failOn.join(',')}, ${errored} page errors)`);
   if (outcome === 'findings' && !blocking) {
     console.log('scangov: findings present, exiting 0 because --block is not set');
   }
@@ -192,6 +213,17 @@ function normalizeCanonicalDomain(value) {
   } catch {
     fail(`--canonical-domain is not a valid domain or origin: ${value}`);
   }
+}
+
+async function fetchHtml(url) {
+  let res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ScanGovBot/1.0; +https://scangov.com/bot)' } });
+  if (res.status === 404) throw new Error('page not found (HTTP 404)');
+  if (!res.ok) throw new Error(`page returned HTTP ${res.status}`);
+  return res.text();
+}
+
+function round1(n) {
+  return Math.round(n * 10) / 10;
 }
 
 function slug(p) {

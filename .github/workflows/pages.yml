@@ -43,9 +43,9 @@ on:
         type: string
         default: '22'
       fail-on:
-        description: Finding categories that count as findings.
+        description: ScanGov topics whose failing attributes count as findings.
         type: string
-        default: accessibility,files,metadata,schema
+        default: accessibility
       block:
         description: Set true to block the deploy when there are findings. Default deploys anyway and reports.
         type: boolean

@@ -12,7 +12,7 @@
 | `max-pages` | `200` | Cap on pages audited per run. |
 | `scangov-domain` | | Domain known to ScanGov. Enables a read-only lookup of production results for host-dependent checks. |
 | `baseline` | | Accepted findings file. |
-| `fail-on` | `accessibility,files,metadata,schema` | Finding categories that fail the job. |
+| `fail-on` | `accessibility` | ScanGov topics (`accessibility`, `usability`, `botability`, `security`) whose failing attributes count as findings. |
 | `with-cls` | `false` | Also run the Lighthouse performance category for a lab CLS reading. |
 | `block` | `false` | Set `true` to fail the job when there are findings, which blocks any job that depends on it. Default is report only. |
 | `report-dir` | `scangov-report` | Where reports are written. Uploaded as a workflow artifact. |
@@ -71,8 +71,9 @@ jobs:
 ## Running locally
 
 ```sh
-npm install
-npx scangov --site-dir _site --canonical-domain www.example.gov
+git clone https://github.com/ScanGov/action scangov-action
+cd scangov-action && npm install
+node src/cli.mjs --site-dir /path/to/_site --canonical-domain www.example.gov
 ```
 
 `npm test` serves the fixture site and enumerates its pages without running

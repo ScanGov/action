@@ -1,37 +1,26 @@
 /*
-* Report writers.
-*
-* Until the shared @scangov/core package exists, the report shows raw
-* Lighthouse category scores and the audits that failed on each page. The
-* mapping from Lighthouse audits to ScanGov attributes and topic scores
-* lives in ScanGov's production auditor today and arrives here when that
-* code is extracted into core so both sides share one implementation.
+* Report writers. Results are presented in ScanGov's topic structure:
+* accessibility, usability, botability and security, each scored per page
+* as the share of passing attributes, exactly as scangov.org scores a page.
 */
 
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-
-export function summarize(lhr) {
-  let categories = {};
-  for (let [id, cat] of Object.entries(lhr.categories || {})) {
-    categories[id] = cat.score == null ? null : Math.round(cat.score * 100);
-  }
-  let failing = [];
-  for (let [id, cat] of Object.entries(lhr.categories || {})) {
-    for (let ref of cat.auditRefs || []) {
-      let audit = lhr.audits[ref.id];
-      if (!audit) continue;
-      if (['notApplicable', 'informative', 'manual'].includes(audit.scoreDisplayMode)) continue;
-      if (audit.score === 1) continue;
-      failing.push({ id: ref.id, category: id, title: audit.title, score: audit.score });
-    }
-  }
-  return { categories, failing, finalUrl: lhr.finalDisplayedUrl };
-}
+import { TOPICS, HOST_DERIVED_ATTRIBUTES, topicDisplayName, describeAttribute } from './core/audit.mjs';
 
 export async function writeReports(reportDir, data) {
   await writeFile(path.join(reportDir, 'scangov.json'), JSON.stringify(data, null, 2));
   await writeFile(path.join(reportDir, 'scangov.md'), toMarkdown(data));
+}
+
+function failedAttributes(page) {
+  let out = [];
+  for (let topic of TOPICS) {
+    for (let [name, passed] of Object.entries(page.scores?.[topic]?.attributes || {})) {
+      if (!passed) out.push({ topic, name });
+    }
+  }
+  return out;
 }
 
 function toMarkdown(data) {
@@ -44,34 +33,54 @@ function toMarkdown(data) {
   if (data.result) {
     let r = data.result;
     let mode = r.blocking ? 'blocking' : 'report only';
-    let state = r.outcome === 'clean' ? 'No findings.' : `${r.findings} finding(s).`;
+    let state = r.outcome === 'clean' ? 'No findings.' : `${r.findings} finding(s) in ${r.failOn.join(', ')}.`;
     let effect = r.outcome === 'clean' ? '' : r.blocking ? ' The job fails.' : ' The job passes because `block` is not enabled.';
     lines.push(`**Result:** ${state}${effect} Mode: ${mode}.`);
     lines.push('');
   }
-  lines.push('> Preview output. Lighthouse category scores and failing audits are shown.');
-  lines.push('> ScanGov topic scores arrive when the shared scoring package is published.');
-  lines.push('');
-  lines.push('| Page | Accessibility | Best practices | SEO | Failing audits |');
-  lines.push('|---|---|---|---|---|');
+
+  lines.push(`| Page | ${TOPICS.map(topicDisplayName).join(' | ')} |`);
+  lines.push(`|---|${TOPICS.map(() => '---').join('|')}|`);
   for (let p of data.pages) {
     if (p.status !== 'ok') {
-      lines.push(`| \`${p.path}\` | error | | | ${escape(p.error)} |`);
+      lines.push(`| \`${p.path}\` | ${TOPICS.map(() => 'error').join(' | ')} |`);
       continue;
     }
-    let c = p.categories;
-    lines.push(`| \`${p.path}\` | ${c.accessibility ?? '-'} | ${c['best-practices'] ?? '-'} | ${c.seo ?? '-'} | ${p.failing.length} |`);
+    lines.push(`| \`${p.path}\` | ${TOPICS.map(t => p.scores[t].score ?? '-').join(' | ')} |`);
   }
   lines.push('');
+
   for (let p of data.pages) {
-    if (p.status !== 'ok' || p.failing.length === 0) continue;
-    lines.push(`<details><summary><code>${p.path}</code>: ${p.failing.length} failing</summary>`);
+    if (p.status !== 'ok') {
+      lines.push(`<details><summary><code>${p.path}</code>: could not be audited</summary>`);
+      lines.push('');
+      lines.push(escape(p.error));
+      lines.push('');
+      lines.push('</details>');
+      lines.push('');
+      continue;
+    }
+    let failed = failedAttributes(p);
+    if (failed.length === 0) continue;
+    lines.push(`<details><summary><code>${p.path}</code>: ${failed.length} failing attribute(s)</summary>`);
     lines.push('');
-    for (let f of p.failing) lines.push(`- **${f.id}** (${f.category}): ${escape(f.title)}`);
-    lines.push('');
+    for (let topic of TOPICS) {
+      let names = failed.filter(f => f.topic === topic).map(f => f.name);
+      if (names.length === 0) continue;
+      lines.push(`**${topicDisplayName(topic)}** (${p.scores[topic].score})`);
+      lines.push('');
+      for (let name of names) {
+        let d = describeAttribute(topic, name);
+        let detail = name === 'readability' && p.readability ? ` (ARI grade ${p.readability.ari})` : '';
+        lines.push(`- ${escape(d.displayName)} \`${name}\`${detail}${d.error ? `: ${escape(d.error)}` : ''}`);
+      }
+      lines.push('');
+    }
     lines.push('</details>');
     lines.push('');
   }
+
+  lines.push(`Not scored here because the host decides them: ${HOST_DERIVED_ATTRIBUTES.map(a => '`' + a + '`').join(', ')}. Domain-level checks (sitemap, security.txt, X-Content-Type-Options, www, Core Web Vitals) are measured once per site by ScanGov monitoring. Both are left to the production audit.`);
   return lines.join('\n');
 }
 
