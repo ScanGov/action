@@ -1,0 +1,42 @@
+# A static site with no build step, deployed to GitHub Pages.
+# The repository checkout is the production tree.
+# Pages source must be set to "GitHub Actions" in repository settings.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ScanGov/action@v1
+        with:
+          site-dir: .
+          base-path: /my-repo/
+          canonical-domain: my-org.github.io
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+  deploy:
+    needs: audit
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

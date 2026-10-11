@@ -147,3 +147,7 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# ScanGov action output
+scangov-report/
+.scangov-test/

@@ -1,0 +1,139 @@
+name: ScanGov
+description: Audit a static site against ScanGov standards inside your CI workflow, before it deploys. No public URL, nothing leaves the runner.
+author: ScanGov
+branding:
+  icon: check-square
+  color: blue
+
+inputs:
+  site-dir:
+    description: Directory containing the built site. The action serves it on 127.0.0.1. Mutually exclusive with base-url.
+    required: false
+  base-url:
+    description: URL of an already running server to audit instead of site-dir.
+    required: false
+  base-path:
+    description: Path prefix the site is published under, for example /my-repo/ on a GitHub Pages project site.
+    required: false
+    default: /
+  canonical-domain:
+    description: The domain your pages already use in canonical links, og:url and the sitemap, for example www.example.gov. Used to resolve those URLs against the local tree. Never fetched.
+    required: false
+  pages:
+    description: Comma-separated list of paths to audit. Default is every HTML page in the tree.
+    required: false
+  max-pages:
+    description: Upper bound on pages audited per run.
+    required: false
+    default: '200'
+  scangov-domain:
+    description: Domain known to ScanGov. Enables a read-only lookup of production results for the host-dependent checks. Optional.
+    required: false
+  baseline:
+    description: Path to a baseline file of accepted findings.
+    required: false
+  fail-on:
+    description: Comma-separated finding categories that fail the job.
+    required: false
+    default: accessibility,files,metadata,schema
+  with-cls:
+    description: Run the Lighthouse performance category to get a lab CLS reading.
+    required: false
+    default: 'false'
+  block:
+    description: Set to true to fail the job when there are findings, which blocks any job that depends on this one. Default is report only.
+    required: false
+    default: 'false'
+  report-dir:
+    description: Where reports are written.
+    required: false
+    default: scangov-report
+  node-version:
+    description: Node.js version to use. Lighthouse 13 needs 22.19 or newer.
+    required: false
+    default: '22'
+
+outputs:
+  report-dir:
+    description: Directory containing scangov.json and scangov.md.
+    value: ${{ inputs.report-dir }}
+  exit-code:
+    description: 0 clean, 1 findings, 2 configuration error.
+    value: ${{ steps.audit.outputs.exit-code }}
+  outcome:
+    description: clean or findings, regardless of whether block is set. Use it to gate later jobs yourself.
+    value: ${{ steps.audit.outputs.outcome }}
+  findings:
+    description: Number of findings.
+    value: ${{ steps.audit.outputs.findings }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Install ScanGov CLI
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm ci --no-audit --no-fund
+
+    - name: Audit
+      id: audit
+      shell: bash
+      env:
+        INPUT_SITE_DIR: ${{ inputs.site-dir }}
+        INPUT_BASE_URL: ${{ inputs.base-url }}
+        INPUT_BASE_PATH: ${{ inputs.base-path }}
+        INPUT_CANONICAL_DOMAIN: ${{ inputs.canonical-domain }}
+        INPUT_PAGES: ${{ inputs.pages }}
+        INPUT_MAX_PAGES: ${{ inputs.max-pages }}
+        INPUT_SCANGOV_DOMAIN: ${{ inputs.scangov-domain }}
+        INPUT_BASELINE: ${{ inputs.baseline }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_WITH_CLS: ${{ inputs.with-cls }}
+        INPUT_BLOCK: ${{ inputs.block }}
+        INPUT_REPORT_DIR: ${{ inputs.report-dir }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set +e
+        args=()
+        [ -n "$INPUT_SITE_DIR" ] && args+=(--site-dir "$INPUT_SITE_DIR")
+        [ -n "$INPUT_BASE_URL" ] && args+=(--base-url "$INPUT_BASE_URL")
+        [ -n "$INPUT_BASE_PATH" ] && args+=(--base-path "$INPUT_BASE_PATH")
+        [ -n "$INPUT_CANONICAL_DOMAIN" ] && args+=(--canonical-domain "$INPUT_CANONICAL_DOMAIN")
+        [ -n "$INPUT_PAGES" ] && args+=(--pages "$INPUT_PAGES")
+        [ -n "$INPUT_MAX_PAGES" ] && args+=(--max-pages "$INPUT_MAX_PAGES")
+        [ -n "$INPUT_SCANGOV_DOMAIN" ] && args+=(--scangov-domain "$INPUT_SCANGOV_DOMAIN")
+        [ -n "$INPUT_BASELINE" ] && args+=(--baseline "$INPUT_BASELINE")
+        [ -n "$INPUT_FAIL_ON" ] && args+=(--fail-on "$INPUT_FAIL_ON")
+        [ "$INPUT_WITH_CLS" = "true" ] && args+=(--with-cls)
+        [ "$INPUT_BLOCK" = "true" ] && args+=(--block)
+        args+=(--report-dir "$INPUT_REPORT_DIR")
+        node "$ACTION_PATH/src/cli.mjs" "${args[@]}"
+        code=$?
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        if [ -f "$INPUT_REPORT_DIR/scangov.json" ]; then
+          node -e '
+            const r = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).result || {};
+            console.log(`outcome=${r.outcome || "error"}`);
+            console.log(`findings=${r.findings ?? 0}`);
+          ' "$INPUT_REPORT_DIR/scangov.json" >> "$GITHUB_OUTPUT"
+        else
+          echo "outcome=error" >> "$GITHUB_OUTPUT"
+          echo "findings=0" >> "$GITHUB_OUTPUT"
+        fi
+        if [ -f "$INPUT_REPORT_DIR/scangov.md" ]; then
+          cat "$INPUT_REPORT_DIR/scangov.md" >> "$GITHUB_STEP_SUMMARY"
+        fi
+        exit $code
+
+    - name: Upload report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: scangov-report
+        path: ${{ inputs.report-dir }}
+        retention-days: 30
+        if-no-files-found: ignore

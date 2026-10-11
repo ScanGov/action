@@ -1,0 +1,23 @@
+# A site built and deployed by its host (Netlify, Cloudflare Pages, Vercel).
+# There is no deploy to gate from GitHub, so this runs a duplicate build on
+# pull requests purely to audit it, and reports in the job summary.
+
+name: ScanGov audit
+
+on:
+  pull_request:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run build
+      - uses: ScanGov/action@v1
+        with:
+          site-dir: dist
+          canonical-domain: www.example.gov

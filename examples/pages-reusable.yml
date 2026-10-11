@@ -1,0 +1,19 @@
+# The shortest form: one job that calls the reusable workflow.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  site:
+    uses: ScanGov/action/.github/workflows/pages.yml@v1
+    with:
+      site-dir: .
+      base-path: /my-repo/
+      canonical-domain: my-org.github.io
+    permissions:
+      contents: read
+      pages: write
+      id-token: write

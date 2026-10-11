@@ -1,0 +1,27 @@
+{
+  "name": "scangov",
+  "version": "0.1.0",
+  "description": "Audit a static site against ScanGov standards inside CI, before it deploys.",
+  "license": "MIT",
+  "repository": "github:ScanGov/action",
+  "homepage": "https://scangov.org",
+  "type": "module",
+  "bin": {
+    "scangov": "src/cli.mjs"
+  },
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": ">=22.19"
+  },
+  "scripts": {
+    "test": "node src/cli.mjs --site-dir fixtures/site --base-path /fixture/ --canonical-domain example.gov --report-dir .scangov-test --dry-run",
+    "smoke": "node src/cli.mjs --site-dir fixtures/site --base-path /fixture/ --canonical-domain example.gov --report-dir .scangov-test"
+  },
+  "dependencies": {
+    "chrome-launcher": "^1.2.0",
+    "lighthouse": "13.5.0",
+    "linkedom": "^0.18.11"
+  }
+}

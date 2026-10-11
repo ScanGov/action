@@ -1,0 +1,93 @@
+# Reusable workflow for GitHub Pages sites: build (optional), audit with
+# ScanGov, and deploy. With block: true the deploy waits on a clean audit.
+#
+# Call it from your repo:
+#
+#   jobs:
+#     site:
+#       uses: ScanGov/action/.github/workflows/pages.yml@v1
+#       with:
+#         base-path: /my-repo/
+#         canonical-domain: my-org.github.io
+#         block: true    # omit to report only; set true to gate the deploy
+#       permissions:
+#         contents: read
+#         pages: write
+#         id-token: write
+#
+# Your repository's Pages source must be set to "GitHub Actions".
+
+name: ScanGov audit and deploy to Pages
+
+on:
+  workflow_call:
+    inputs:
+      site-dir:
+        description: Directory to serve and publish. Use . for sites with no build step.
+        type: string
+        default: .
+      build-command:
+        description: Shell command that produces site-dir. Leave empty for no build.
+        type: string
+        default: ''
+      base-path:
+        description: Path prefix the site is published under, for example /my-repo/.
+        type: string
+        default: /
+      canonical-domain:
+        description: Domain your pages use in canonical links and the sitemap. Never fetched.
+        type: string
+        default: ''
+      node-version:
+        description: Node.js version for the build and the audit.
+        type: string
+        default: '22'
+      fail-on:
+        description: Finding categories that count as findings.
+        type: string
+        default: accessibility,files,metadata,schema
+      block:
+        description: Set true to block the deploy when there are findings. Default deploys anyway and reports.
+        type: boolean
+        default: false
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        if: inputs.build-command != ''
+        with:
+          node-version: ${{ inputs.node-version }}
+      - name: Build
+        if: inputs.build-command != ''
+        run: ${{ inputs.build-command }}
+      - uses: ScanGov/action@v1
+        with:
+          site-dir: ${{ inputs.site-dir }}
+          base-path: ${{ inputs.base-path }}
+          canonical-domain: ${{ inputs.canonical-domain }}
+          fail-on: ${{ inputs.fail-on }}
+          block: ${{ inputs.block }}
+          node-version: ${{ inputs.node-version }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ inputs.site-dir }}
+
+  deploy:
+    needs: audit
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
