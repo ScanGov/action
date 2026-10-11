@@ -1,5 +1,5 @@
 name: ScanGov
-description: Audit a static site against ScanGov standards inside your CI workflow, before it deploys. No public URL, nothing leaves the runner.
+description: Audit a static site against ScanGov standards in CI before it deploys. Nothing leaves the runner.
 author: ScanGov
 branding:
   icon: check-square
