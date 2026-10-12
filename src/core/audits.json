@@ -2741,57 +2741,6 @@
         "relatedLinks": {}
       },
       {
-        "key": "readability",
-        "scorekey": "readability",
-        "displayName": "Readability",
-        "tag": "",
-        "description": "Page content is written at a reading level most users can understand.",
-        "why": "Improves communication by helping readers quickly understand messages without confusion or frustration.",
-        "risk": "People struggle to understand your content.",
-        "error": "Automated Readability Index score is above 8 (higher than 7th grade reading level).",
-        "impact": 10,
-        "guidance": [
-          {
-            "displayName": "21st Century Integrated Digital Experience Act (IDEA)",
-            "url": "/21stcenturyidea"
-          },
-          {
-            "displayName": "Automated Readability Index (ARI)",
-            "url": "/automated-readability-index"
-          },
-          {
-            "displayName": "Flesch-Kincaid (FK)",
-            "url": "/flesch-kincaid"
-          },
-          {
-            "displayName": "U.S. Federal Website Standards",
-            "url": "/federal-website-standards"
-          },
-          {
-            "displayName": "Plain Writing Act of 2010",
-            "url": "/plain-writing-act"
-          }
-        ],
-        "userStories": [
-          {
-            "title": "As a user reading content on a web page, I want the text to have high readability through clear content and optimal presentation so that I can understand and process the information with minimal effort and maximum comprehension."
-          }
-        ],
-        "sections": {
-          "about": {
-            "title": "About",
-            "content": "<p>Readability measures how easy text is to understand by looking at words and layout. Experts like Flesch-Kincaid and Automated Readability Index help test reading level. For example, ARI uses the average number of characters per word and words per sentence to give a U.S. school grade level\u2014e.g., 8 = eighth grade. Simple words, short sentences, clear design, and legible fonts make text easier to read. These tests help match writing to different audiences' skill levels.</p>"
-          },
-          "links": {
-            "title": "Links",
-            "content": "<ul>\n  <li><a href=\"https://en.wikipedia.org/wiki/Readability\">Readability</a> (Wikipedia)</li>\n</ul>"
-          }
-        },
-        "relatedLinks": {
-          "audio": "https://standards.scangov.org/assets/audio/readability.mp3"
-        }
-      },
-      {
         "key": "viewport",
         "scorekey": "viewport",
         "displayName": "Viewport meta tag",
@@ -3665,6 +3614,73 @@
         },
         "relatedLinks": {
           "audio": "https://standards.scangov.org/assets/audio/stld.mp3"
+        }
+      }
+    ]
+  },
+  "readability": {
+    "displayName": "Readability",
+    "icon": "book-open",
+    "color": "#ffb3d1",
+    "url": "/guidance/readability",
+    "rankingsUrl": "/rankings/readability/",
+    "scangovUrl": "/readability/",
+    "description": "Write content at a reading level most users can understand.",
+    "standardsDescription": "Standards for writing web content in plain language that people can read and understand quickly.",
+    "guidanceDescription": "Policy and guidance that supports plain language and readable web content.",
+    "ogImage": "https://scangov.com/assets/img/og/readability-og.png",
+    "why": "Plain language helps people understand services and procedures the first time, reducing calls, errors and office visits.",
+    "risk": "Users cannot understand your content.",
+    "attributes": [
+      {
+        "key": "reading-level",
+        "scorekey": "reading-level",
+        "displayName": "Reading level",
+        "tag": "",
+        "description": "Page text reads at or below a 7th grade level so most users can understand it.",
+        "why": "Improves communication by helping readers quickly understand messages without confusion or frustration.",
+        "risk": "Users struggle to understand your content.",
+        "error": "Automated Readability Index score is above 8 (higher than 7th grade reading level).",
+        "impact": 10,
+        "guidance": [
+          {
+            "displayName": "21st Century Integrated Digital Experience Act (IDEA)",
+            "url": "/21stcenturyidea"
+          },
+          {
+            "displayName": "Automated Readability Index (ARI)",
+            "url": "/automated-readability-index"
+          },
+          {
+            "displayName": "Flesch-Kincaid (FK)",
+            "url": "/flesch-kincaid"
+          },
+          {
+            "displayName": "U.S. Federal Website Standards",
+            "url": "/federal-website-standards"
+          },
+          {
+            "displayName": "Plain Writing Act of 2010",
+            "url": "/plain-writing-act"
+          }
+        ],
+        "userStories": [
+          {
+            "title": "As a user reading content on a web page, I want the text to have high readability through clear content and optimal presentation so that I can understand and process the information with minimal effort and maximum comprehension."
+          }
+        ],
+        "sections": {
+          "about": {
+            "title": "About",
+            "content": "<p>Readability measures how easy text is to understand by looking at words and sentences. Simple words, short sentences, clear design and legible fonts make text easier to read. Formulas like the Automated Readability Index (ARI) and Flesch-Kincaid estimate the U.S. school grade a reader needs to understand a text.</p><p>ScanGov measures the main text of each page with ARI, which uses the average number of characters per word and words per sentence. A page passes when its rounded ARI score is 8 or below, about a 7th grade reading level. Pages that are not in English, or that have no measurable text, are not scored.</p>"
+          },
+          "links": {
+            "title": "Links",
+            "content": "<ul>\n  <li><a href=\"https://en.wikipedia.org/wiki/Readability\">Readability</a> (Wikipedia)</li>\n</ul>"
+          }
+        },
+        "relatedLinks": {
+          "audio": "https://standards.scangov.org/assets/audio/readability.mp3"
         }
       }
     ]

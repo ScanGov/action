@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { composeFromLighthouse } from '../src/core/compose.mjs';
 import { analyzePageHtml } from '../src/core/page-html.mjs';
-import { readabilityPasses, countSyllables, analyzeText } from '../src/core/readability.mjs';
+import { readingLevelFromInfo, countSyllables, analyzeText } from '../src/core/readability.mjs';
 import { buildPageAudit, scorePageAudit, TOPICS, HOST_DERIVED_ATTRIBUTES, describeAttribute } from '../src/core/audit.mjs';
 
 const lhr = JSON.parse(readFileSync(new URL('../fixtures/lhr/about.json', import.meta.url), 'utf8'));
@@ -66,10 +66,23 @@ test('page html: non-English pages skip readability', () => {
   assert.equal(page.readabilityInfo, null);
 });
 
-test('readability threshold is ARI 8 after rounding', () => {
-  assert.equal(readabilityPasses({ automatedReadabilityIndex: 8.4 }), true);
-  assert.equal(readabilityPasses({ automatedReadabilityIndex: 8.5 }), false);
-  assert.equal(readabilityPasses(null), false);
+test('reading level threshold is ARI 8 after rounding', () => {
+  assert.equal(readingLevelFromInfo({ automatedReadabilityIndex: 8.4, words: 50 }), true);
+  assert.equal(readingLevelFromInfo({ automatedReadabilityIndex: 8.5, words: 50 }), false);
+  assert.equal(readingLevelFromInfo(null), undefined);
+});
+
+test('reading level is not scored on skipped or empty extractions', () => {
+  assert.equal(readingLevelFromInfo({ automatedReadabilityIndex: 0, words: 0, skipped: 'html-too-large' }), null);
+  assert.equal(readingLevelFromInfo({ automatedReadabilityIndex: 0, words: 0, sentences: 0 }), null);
+  let audit = buildPageAudit({ lhr, html: '<html lang="en"><head><title>Empty</title></head><body></body></html>' });
+  assert.equal('reading-level' in audit.readability.attributes, false);
+  assert.equal(scorePageAudit(audit).readability.score, null);
+});
+
+test('non-English pages are excluded from the reading level', () => {
+  let audit = buildPageAudit({ lhr, html: '<html lang="es"><head><title>Hola</title></head><body><p>Hola mundo. Esto es una prueba.</p></body></html>' });
+  assert.deepEqual(scorePageAudit(audit).readability, { attributes: {}, all: 0, correct: 0, score: null });
 });
 
 test('syllable counter matches production rules', () => {
@@ -90,7 +103,9 @@ test('build and score a page audit', () => {
   let audit = buildPageAudit({ lhr, html: aboutHtml });
   let scores = scorePageAudit(audit);
   assert.deepEqual(Object.keys(scores), TOPICS);
-  assert.equal(scores.usability.attributes.readability, true);
+  assert.equal(scores.readability.attributes['reading-level'], true);
+  assert.equal('readability' in scores.usability.attributes, false);
+  assert.equal(TOPICS[TOPICS.length - 1], 'readability');
   assert.equal(scores.usability.attributes.description, false);
   for (let topic of TOPICS) {
     let s = scores[topic];
@@ -109,6 +124,6 @@ test('host-derived attributes can be kept for comparison with production', () =>
 });
 
 test('attribute descriptions come from audits.json', () => {
-  assert.equal(describeAttribute('usability', 'readability').displayName, 'Readability');
+  assert.equal(describeAttribute('readability', 'reading-level').displayName, 'Reading level');
   assert.equal(describeAttribute('accessibility', 'no-such-thing').displayName, 'no-such-thing');
 });

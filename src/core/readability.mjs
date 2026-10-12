@@ -20,13 +20,23 @@ import unfluff from 'unfluff';
    skipped: unfluff re-parses the whole document synchronously. */
 export const MAX_READABILITY_HTML_BYTES = 5 * 1024 * 1024;
 
-/* ARI above this grade fails the readability attribute. */
-export const READABILITY_MAX_GRADE = 8;
+/* The reading-level attribute (readability topic) passes when the rounded ARI
+   is at or below this U.S. grade (8 is about a 7th grade reading level). */
+export const READING_LEVEL_MAX_GRADE = 8;
 
 const NON_CONTENT_SELECTOR = 'script, style, noscript, template, svg';
 
-export function readabilityPasses(info) {
-  return Boolean(info) && Math.round(info.automatedReadabilityIndex) <= READABILITY_MAX_GRADE;
+/* Mirrors readingLevelFromInfo in auditor/src/shared/transform.mjs:
+   true/false for a measured page, null when the extraction was skipped or
+   found no words (the page is not scored, an ARI of 0 on an empty page is
+   not a pass), undefined when there is nothing to derive from. */
+export function readingLevelFromInfo(info, maxGrade = READING_LEVEL_MAX_GRADE) {
+  if (!info || typeof info !== 'object') return undefined;
+  if (info.skipped) return null;
+  if (typeof info.words === 'number' && info.words <= 0) return null;
+  let ari = info.automatedReadabilityIndex;
+  if (typeof ari !== 'number' || Number.isNaN(ari)) return undefined;
+  return Math.round(ari) <= maxGrade;
 }
 
 function emptyResult(title, skipped) {

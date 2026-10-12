@@ -7,7 +7,7 @@ The action serves and audits your site on localhost inside your workflow. It run
 same configuration ScanGov's production auditor. It writes the results to the job summary. Nothing created is reachable from
 outside the runner, no page content leaves it.
 
-> Status: pre-release. Per-page scores for all four ScanGov topics,
+> Status: pre-release. Per-page scores for all five ScanGov topics,
 > including readability, use the same logic as scangov.org. Domain-level
 > and host-dependent checks stay with production monitoring.
 

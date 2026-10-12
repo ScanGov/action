@@ -1,9 +1,10 @@
 /*
 * Assemble one page's ScanGov audit from its Lighthouse result and its HTML,
 * then score it by topic. The merge mirrors ScanGov's production auditor:
-* HTML-derived attributes are added to the Lighthouse-derived ones,
-* readability passes when the Automated Readability Index rounds to 8 or
-* below, and non-English pages are not scored on readability.
+* HTML-derived attributes are added to the Lighthouse-derived ones, the
+* readability topic's single attribute (reading-level) passes when the
+* Automated Readability Index rounds to 8 or below, pages with no measurable
+* text are not scored on it, and neither are non-English pages.
 *
 * Scoring mirrors the production transform: per topic,
 * score = round(correct / all * 100), with the domain-level global
@@ -14,11 +15,12 @@
 import { createRequire } from 'node:module';
 import { composeFromLighthouse } from './compose.mjs';
 import { analyzePageHtml, isEnglish } from './page-html.mjs';
-import { readabilityPasses } from './readability.mjs';
+import { readingLevelFromInfo } from './readability.mjs';
 
 const require = createRequire(import.meta.url);
 export const AUDITS = require('./audits.json');
-export const TOPICS = ['accessibility', 'usability', 'botability', 'security'].filter(t => t in AUDITS);
+/* Readability stays last: its chart hue is only validated next to usability's. */
+export const TOPICS = ['accessibility', 'usability', 'botability', 'security', 'readability'].filter(t => t in AUDITS);
 
 /* Measured once per site by ScanGov's domain-level pass, never per page. */
 export const GLOBAL_ATTRIBUTES = [
@@ -41,16 +43,18 @@ export function buildPageAudit({ lhr, html, performance = false }) {
   audit.botability.attributes.crawlable = page.botability.attributes.crawlable;
   audit.botability.attributes['text-content'] = page.botability.attributes['text-content'];
 
+  audit.readability = { attributes: {} };
   audit.readabilityInfo = page.readabilityInfo || {};
-  if (page.readabilityInfo) {
-    audit.usability.attributes.readability = readabilityPasses(page.readabilityInfo);
+  let readingLevel = readingLevelFromInfo(page.readabilityInfo);
+  if (typeof readingLevel === 'boolean') {
+    audit.readability.attributes['reading-level'] = readingLevel;
   }
   return audit;
 }
 
 export function scorePageAudit(audit, { excludeHostDerived = true } = {}) {
   let exclude = [...GLOBAL_ATTRIBUTES];
-  if (!isEnglish(audit.lang)) exclude.push('readability');
+  if (!isEnglish(audit.lang)) exclude.push('reading-level');
   if (excludeHostDerived) exclude.push(...HOST_DERIVED_ATTRIBUTES);
   let scores = {};
   for (let topic of TOPICS) {

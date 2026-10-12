@@ -28,16 +28,18 @@ this action predicts the file-derived half of a ScanGov grade.
 ## How pages are scored
 
 Each page gets a score per ScanGov topic (accessibility, usability,
-botability, security): the share of that topic's attributes that pass,
+botability, security, readability): the share of that topic's attributes that pass,
 rounded down, the same formula scangov.org uses. Attributes ScanGov measures
 once per site rather than per page (sitemap, robots, security.txt,
 GovernmentOrganization schema, www, dotgov) are not in the per-page score,
 in CI or in production.
 
-Readability uses the Automated Readability Index on the page's main text,
-after stripping navigation, headers, footers and headings the way
-production does. A page passes at grade 8 or below. Pages whose `lang` is
-not English are not scored on readability.
+Readability is its own topic with one attribute, `reading-level`. It uses
+the Automated Readability Index on the page's main text, after stripping
+navigation, headers, footers and headings the way production does. A page
+passes at a rounded grade of 8 or below. Pages whose `lang` is not English,
+and pages with no measurable text, are not scored on it, so the topic score
+is empty rather than 0 or 100 for those pages.
 
 ## Things only CI can do
 

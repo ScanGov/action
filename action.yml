@@ -33,7 +33,7 @@ inputs:
     description: Path to a baseline file of accepted findings.
     required: false
   fail-on:
-    description: Comma-separated ScanGov topics (accessibility, usability, botability, security) whose failing attributes count as findings.
+    description: Comma-separated ScanGov topics (accessibility, usability, botability, security, readability) whose failing attributes count as findings.
     required: false
     default: accessibility
   with-cls:

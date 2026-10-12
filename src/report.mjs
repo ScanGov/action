@@ -71,7 +71,7 @@ function toMarkdown(data) {
       lines.push('');
       for (let name of names) {
         let d = describeAttribute(topic, name);
-        let detail = name === 'readability' && p.readability ? ` (ARI grade ${p.readability.ari})` : '';
+        let detail = name === 'reading-level' && p.readability ? ` (ARI grade ${p.readability.ari})` : '';
         lines.push(`- ${escape(d.displayName)} \`${name}\`${detail}${d.error ? `: ${escape(d.error)}` : ''}`);
       }
       lines.push('');
