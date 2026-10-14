@@ -29,7 +29,7 @@ build step, published by GitHub Pages at `https://<org>.github.io/<repo>/`.
        branches: [main]
    jobs:
      site:
-       uses: ScanGov/action/.github/workflows/pages.yml@v1
+       uses: ScanGov/action/.github/workflows/pages.yml@v1.0.1
        with:
          site-dir: .
          base-path: /<repo>/
@@ -43,6 +43,9 @@ build step, published by GitHub Pages at `https://<org>.github.io/<repo>/`.
    `base-path` is the path your project site is published under.
    `canonical-domain` is the domain your pages already use in canonical
    links and the sitemap. It is never fetched.
+
+   The tag shown is the latest release, pinned exactly. See
+   [Versions](docs/reference.md#versions).
 
 3. Push to `main`. The workflow audits every HTML page in the repository,
    writes the report to the run's summary, and deploys.

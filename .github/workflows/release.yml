@@ -1,0 +1,72 @@
+# Cut a release. Run it from the Actions tab with the new version number.
+#
+# It points every ScanGov/action@v… reference in the README, docs, examples
+# and the reusable workflow at the new tag, sets package.json to match,
+# commits that to main, tags it and publishes a GitHub release. Because the
+# bump lands before the tag, the files inside the tag reference the tag
+# itself, and anyone copying an example from the repo gets the latest
+# version pinned exactly.
+
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, for example 1.0.2
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check the version is new
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION#v}" >/dev/null; then
+            echo "::error::v${VERSION#v} already exists"
+            exit 1
+          fi
+
+      - name: Point docs and examples at the new tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: node scripts/set-version.mjs "$VERSION"
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+
+      - name: Commit, tag and push
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          v="v${VERSION#v}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Release $v"
+          git tag -a "$v" -m "$v"
+          git push origin main "$v"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: gh release create "v${VERSION#v}" --title "v${VERSION#v}" --generate-notes

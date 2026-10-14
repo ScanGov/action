@@ -26,7 +26,7 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npx @11ty/eleventy
-      - uses: ScanGov/action@v1
+      - uses: ScanGov/action@v1.0.1
         with:
           site-dir: _site
           canonical-domain: www.example.gov

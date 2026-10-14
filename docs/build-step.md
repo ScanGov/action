@@ -13,7 +13,7 @@ on:
     branches: [main]
 jobs:
   site:
-    uses: ScanGov/action/.github/workflows/pages.yml@v1
+    uses: ScanGov/action/.github/workflows/pages.yml@v1.0.1
     with:
       build-command: npm ci && npx @11ty/eleventy
       site-dir: _site
