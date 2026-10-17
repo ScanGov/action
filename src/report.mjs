@@ -1,7 +1,9 @@
 /*
 * Report writers. Results are presented in ScanGov's topic structure:
-* accessibility, usability, botability and security, each scored per page
-* as the share of passing attributes, exactly as scangov.org scores a page.
+* accessibility, usability, botability, security and readability, each
+* scored per page as the share of passing attributes, exactly as scangov.org
+* scores a page. Pages that were checked from their HTML only carry a score
+* for readability alone; the Lighthouse-derived topics show "-".
 */
 
 import { writeFile } from 'node:fs/promises';
@@ -23,11 +25,23 @@ function failedAttributes(page) {
   return out;
 }
 
+function auditLabel(page) {
+  if (page.audit === 'html') return 'HTML only';
+  return page.performance ? 'Lighthouse + CLS' : 'Lighthouse';
+}
+
 function toMarkdown(data) {
   let lines = [];
+  let full = data.pages.filter(p => p.audit !== 'html');
+  let htmlOnly = data.pages.length - full.length;
+  let withPerformance = data.pages.filter(p => p.performance).length;
+
   lines.push('## ScanGov pre-deploy audit');
   lines.push('');
-  lines.push(`Audited ${data.pages.length} page(s) from \`${data.basePath}\` with Lighthouse ${data.lighthouseVersion || ''}.`);
+  let summary = `Checked ${data.pages.length} page(s) from \`${data.basePath}\`. Lighthouse ${data.lighthouseVersion || ''} ran on ${full.length} of them`;
+  if (withPerformance > 0) summary += `, with the performance category on ${withPerformance}`;
+  summary += htmlOnly > 0 ? `; the other ${htmlOnly} were checked from their HTML (social tags, language, readability).` : '.';
+  lines.push(summary);
   if (data.canonicalDomain) lines.push(`Canonical domain: ${data.canonicalDomain}`);
   lines.push('');
   if (data.result) {
@@ -39,14 +53,14 @@ function toMarkdown(data) {
     lines.push('');
   }
 
-  lines.push(`| Page | ${TOPICS.map(topicDisplayName).join(' | ')} |`);
-  lines.push(`|---|${TOPICS.map(() => '---').join('|')}|`);
+  lines.push(`| Page | Audit | ${TOPICS.map(topicDisplayName).join(' | ')} |`);
+  lines.push(`|---|---|${TOPICS.map(() => '---').join('|')}|`);
   for (let p of data.pages) {
     if (p.status !== 'ok') {
-      lines.push(`| \`${p.path}\` | ${TOPICS.map(() => 'error').join(' | ')} |`);
+      lines.push(`| \`${p.path}\` | ${auditLabel(p)} | ${TOPICS.map(() => 'error').join(' | ')} |`);
       continue;
     }
-    lines.push(`| \`${p.path}\` | ${TOPICS.map(t => p.scores[t].score ?? '-').join(' | ')} |`);
+    lines.push(`| \`${p.path}\` | ${auditLabel(p)} | ${TOPICS.map(t => p.scores[t].score ?? '-').join(' | ')} |`);
   }
   lines.push('');
 
@@ -67,7 +81,8 @@ function toMarkdown(data) {
     for (let topic of TOPICS) {
       let names = failed.filter(f => f.topic === topic).map(f => f.name);
       if (names.length === 0) continue;
-      lines.push(`**${topicDisplayName(topic)}** (${p.scores[topic].score})`);
+      let score = p.scores[topic].score;
+      lines.push(`**${topicDisplayName(topic)}**${score == null ? '' : ` (${score})`}`);
       lines.push('');
       for (let name of names) {
         let d = describeAttribute(topic, name);
@@ -80,6 +95,10 @@ function toMarkdown(data) {
     lines.push('');
   }
 
+  if (htmlOnly > 0) {
+    lines.push(`Lighthouse ran on a sample: the homepage, each section's landing page, then each section's first inner page${data.lighthouseSample ? `, up to ${data.lighthouseSample} pages` : ''}. Set \`lighthouse-pages\` or \`lighthouse-max-pages\` to change it.`);
+    lines.push('');
+  }
   lines.push(`Not scored here because the host decides them: ${HOST_DERIVED_ATTRIBUTES.map(a => '`' + a + '`').join(', ')}. Domain-level checks (sitemap, security.txt, X-Content-Type-Options, www, Core Web Vitals) are measured once per site by ScanGov monitoring. Both are left to the production audit.`);
   return lines.join('\n');
 }

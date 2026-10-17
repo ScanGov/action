@@ -5,8 +5,8 @@
 * Flags mirror ScanGov's production auditor: headless Chrome, the
 * ScanGovBot emulated user agent, no CPU slowdown, a 30 second load wait,
 * audioeye blocked, and only the accessibility, best-practices and seo
-* categories. The performance category is opt-in because it adds a throttled
-* trace per page and only the lab CLS reading uses it.
+* categories. The performance category is added per page on request: it
+* adds a throttled trace, and only the lab CLS reading from it is used.
 */
 
 import lighthouse from 'lighthouse';
@@ -25,8 +25,7 @@ const CHROME_FLAGS = [
 ];
 
 export class LighthouseRunner {
-  constructor({ withCls = false } = {}) {
-    this.withCls = withCls;
+  constructor() {
     this.chrome = null;
     this.version = require('lighthouse/package.json').version;
   }
@@ -42,10 +41,10 @@ export class LighthouseRunner {
     }
   }
 
-  async audit(url) {
+  async audit(url, { performance = false } = {}) {
     if (!this.chrome) throw new Error('runner not started');
     let categories = ['accessibility', 'best-practices', 'seo'];
-    if (this.withCls) categories.push('performance');
+    if (performance) categories.push('performance');
     let result = await lighthouse(url, {
       port: this.chrome.port,
       output: 'json',

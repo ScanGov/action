@@ -2,10 +2,13 @@
 /*
 * scangov: audit a static site against ScanGov standards inside CI.
 *
-* Serves a built site on 127.0.0.1, runs Lighthouse against every page with
-* the same flags ScanGov's production auditor uses, and writes JSON and
-* Markdown reports. Nothing is reachable from outside the runner and no page
-* content leaves it.
+* Serves a built site on 127.0.0.1 and checks every HTML page from its
+* markup (social tags, language, readability). A deterministic sample of
+* pages, or the pages you name, also gets a full Lighthouse pass with the
+* same flags ScanGov's production auditor uses, and the homepage (by
+* default) adds the performance category for a lab CLS reading. Writes JSON
+* and Markdown reports. Nothing is reachable from outside the runner and no
+* page content leaves it.
 *
 * Exit codes: 0 clean, 1 findings or page errors, 2 configuration error.
 */
@@ -15,7 +18,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { serve } from './serve.mjs';
-import { enumeratePages } from './pages.mjs';
+import { enumerateSite, sampleLighthousePages } from './pages.mjs';
 import { LighthouseRunner } from './lighthouse.mjs';
 import { writeReports } from './report.mjs';
 import { buildPageAudit, scorePageAudit, TOPICS } from './core/audit.mjs';
@@ -30,15 +33,19 @@ const USAGE = `Usage: scangov (--site-dir <dir> | --base-url <url>) [options]
   --base-url <url>            Already running server to audit instead
   --base-path <path>          Path prefix the site is published under (default /)
   --canonical-domain <host>   Domain your pages use in canonical links and the sitemap (never fetched)
-  --pages <a,b,c>             Paths to audit (default: every HTML page in the tree)
+  --pages <a,b,c>             Paths to check (default: every HTML page in the tree)
   --max-pages <n>             Cap on pages per run (default 200)
+  --lighthouse-pages <a,b,c>  Paths that get the full Lighthouse pass, or "all"
+                              (default: a sample of --lighthouse-max-pages pages)
+  --lighthouse-max-pages <n>  Size of the Lighthouse sample (default 10)
+  --performance-pages <a,b,c> Paths that also run the performance category for a
+                              lab CLS reading, "all" or "none" (default: the homepage)
   --scangov-domain <host>     Domain known to ScanGov, enables production lookup
   --baseline <file>           Accepted findings file
   --fail-on <topics>          Topics whose failing attributes count as findings (default accessibility)
-  --with-cls                  Include the Lighthouse performance category
   --block                     Exit 1 on findings (default: report only, exit 0)
   --report-dir <dir>          Where to write reports (default scangov-report)
-  --dry-run                   Serve and enumerate pages, skip Lighthouse
+  --dry-run                   Serve and list pages by tier, skip Lighthouse
   --help
 `;
 
@@ -55,6 +62,16 @@ function normalizeBasePath(basePath) {
   return p;
 }
 
+function splitPaths(value) {
+  return value.split(',').map(p => p.trim()).filter(Boolean).map(p => (p.startsWith('/') ? p : '/' + p));
+}
+
+function positiveInt(value, flag) {
+  let n = parseInt(value, 10);
+  if (!Number.isFinite(n) || n < 1) fail(`${flag} must be a positive integer`);
+  return n;
+}
+
 async function main() {
   let { values: args } = parseArgs({
     options: {
@@ -64,10 +81,13 @@ async function main() {
       'canonical-domain': { type: 'string' },
       'pages': { type: 'string' },
       'max-pages': { type: 'string', default: '200' },
+      'lighthouse-pages': { type: 'string' },
+      'lighthouse-max-pages': { type: 'string', default: '10' },
+      'performance-pages': { type: 'string' },
+      'with-cls': { type: 'boolean', default: false }, // deprecated alias for --performance-pages all
       'scangov-domain': { type: 'string' },
       'baseline': { type: 'string' },
       'fail-on': { type: 'string', default: 'accessibility' },
-      'with-cls': { type: 'boolean', default: false },
       'block': { type: 'boolean', default: false },
       'report-dir': { type: 'string', default: 'scangov-report' },
       'dry-run': { type: 'boolean', default: false },
@@ -94,8 +114,8 @@ async function main() {
   if (siteDir && !existsSync(siteDir)) fail(`site directory not found: ${siteDir}`);
   if (baseUrl && !args.pages) fail('--base-url needs --pages, there is no tree to enumerate');
 
-  let maxPages = parseInt(args['max-pages'], 10);
-  if (!Number.isFinite(maxPages) || maxPages < 1) fail('--max-pages must be a positive integer');
+  let maxPages = positiveInt(args['max-pages'], '--max-pages');
+  let lighthouseMax = positiveInt(args['lighthouse-max-pages'], '--lighthouse-max-pages');
 
   let basePath = normalizeBasePath(args['base-path']);
   let canonicalDomain = normalizeCanonicalDomain(args['canonical-domain']);
@@ -114,17 +134,49 @@ async function main() {
     console.log(`scangov: serving ${siteDir} at ${origin}${basePath}`);
   }
 
-  let pagePaths = args.pages
-    ? args.pages.split(',').map(p => p.trim()).filter(Boolean)
-    : await enumeratePages(path.resolve(siteDir));
+  let pagePaths;
+  if (args.pages) {
+    pagePaths = splitPaths(args.pages);
+  } else {
+    let site = await enumerateSite(path.resolve(siteDir));
+    pagePaths = site.pages;
+    for (let p of site.skipped) console.log(`scangov: skipping ${p}, not an HTML document`);
+  }
   if (pagePaths.length > maxPages) {
-    console.warn(`scangov: ${pagePaths.length} pages found, auditing the first ${maxPages}`);
+    console.warn(`scangov: ${pagePaths.length} pages found, checking the first ${maxPages}`);
     pagePaths = pagePaths.slice(0, maxPages);
   }
 
+  // Which pages get the full Lighthouse pass. Pages named explicitly are
+  // audited even if the tree did not list them.
+  let lighthouseArg = args['lighthouse-pages'];
+  let lighthousePaths;
+  if (lighthouseArg === 'all') lighthousePaths = [...pagePaths];
+  else if (lighthouseArg) lighthousePaths = splitPaths(lighthouseArg);
+  else lighthousePaths = sampleLighthousePages(pagePaths, { max: lighthouseMax });
+  for (let p of lighthousePaths) if (!pagePaths.includes(p)) pagePaths.push(p);
+
+  // Which of those also run the performance category.
+  let performanceArg = args['performance-pages'];
+  if (args['with-cls']) {
+    console.warn('scangov: --with-cls is deprecated, use --performance-pages all');
+    performanceArg = 'all';
+  }
+  let performancePaths;
+  if (performanceArg === undefined) performancePaths = lighthousePaths.includes('/') ? ['/'] : [];
+  else if (performanceArg === 'none' || performanceArg === '') performancePaths = [];
+  else if (performanceArg === 'all') performancePaths = [...lighthousePaths];
+  else performancePaths = splitPaths(performanceArg);
+  for (let p of performancePaths) {
+    if (!lighthousePaths.includes(p)) lighthousePaths.push(p);
+    if (!pagePaths.includes(p)) pagePaths.push(p);
+  }
+  let lighthouseSet = new Set(lighthousePaths);
+  let performanceSet = new Set(performancePaths);
+
   let pages = pagePaths.map(p => {
-    let rel = p.startsWith('/') ? p.slice(1) : p;
-    return { path: '/' + rel, url: new URL(basePath + rel, origin).href };
+    let rel = p.slice(1);
+    return { path: p, url: new URL(basePath + rel, origin).href };
   });
 
   let manifest = {
@@ -133,30 +185,37 @@ async function main() {
     basePath,
     canonicalDomain,
     blocking,
+    lighthousePages: lighthousePaths,
+    lighthouseSample: lighthouseArg ? null : lighthouseMax,
+    performancePages: performancePaths,
     pages
   };
   await writeFile(path.join(reportDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
+  console.log(`scangov: ${pages.length} page(s), Lighthouse on ${lighthouseSet.size}, performance category on ${performanceSet.size}`);
   if (args['dry-run']) {
-    console.log(`scangov: dry run, ${pages.length} page(s) enumerated`);
-    for (let p of pages) console.log(`  ${p.url}`);
+    for (let p of pages) console.log(`  ${tierLabel(p.path, lighthouseSet, performanceSet).padEnd(22)} ${p.url}`);
     await server?.close();
     return EXIT_CLEAN;
   }
 
-  let runner = new LighthouseRunner({ withCls: args['with-cls'] });
+  let runner = new LighthouseRunner();
   let results = [];
   try {
-    await runner.start();
-    await mkdir(path.join(reportDir, 'lhr'), { recursive: true });
+    if (lighthouseSet.size > 0) {
+      await runner.start();
+      await mkdir(path.join(reportDir, 'lhr'), { recursive: true });
+    }
     for (let page of pages) {
-      process.stdout.write(`scangov: auditing ${page.path} ... `);
+      let full = lighthouseSet.has(page.path);
+      let performance = performanceSet.has(page.path);
+      process.stdout.write(`scangov: ${full ? 'auditing' : 'checking'} ${page.path} ... `);
       try {
         let html = await fetchHtml(page.url);
-        let lhr = await runner.audit(page.url);
-        await writeFile(path.join(reportDir, 'lhr', slug(page.path) + '.json'), JSON.stringify(lhr));
-        let audit = buildPageAudit({ lhr, html, performance: args['with-cls'] });
-        if (args['with-cls']) {
+        let lhr = full ? await runner.audit(page.url, { performance }) : null;
+        if (lhr) await writeFile(path.join(reportDir, 'lhr', slug(page.path) + '.json'), JSON.stringify(lhr));
+        let audit = buildPageAudit({ lhr, html, performance });
+        if (performance) {
           // Only the layout-shift reading is meaningful on a runner; the
           // other lab timings are dropped rather than reported as failures.
           for (let k of ['fcp', 'lcp', 'ttfb', 'inp']) delete audit.usability.attributes[k];
@@ -165,10 +224,20 @@ async function main() {
         let readability = audit.readabilityInfo?.words
           ? { ari: round1(audit.readabilityInfo.automatedReadabilityIndex), fleschKincaidGrade: audit.readabilityInfo.fleschKincaidGrade, words: audit.readabilityInfo.words, sentences: audit.readabilityInfo.sentences }
           : null;
-        results.push({ ...page, status: 'ok', finalUrl: audit.finalUrl, lang: audit.lang, scores, readability, attributes: Object.fromEntries(TOPICS.map(t => [t, audit[t].attributes])) });
-        console.log(TOPICS.map(t => `${t} ${scores[t].score ?? '-'}`).join(', '));
+        results.push({
+          ...page,
+          status: 'ok',
+          audit: full ? 'lighthouse' : 'html',
+          performance,
+          finalUrl: audit.finalUrl || page.url,
+          lang: audit.lang,
+          scores,
+          readability,
+          attributes: Object.fromEntries(TOPICS.map(t => [t, audit[t].attributes]))
+        });
+        console.log(TOPICS.map(t => `${t} ${scores[t].score ?? '-'}`).join(', ') + (full ? '' : ' (html only)'));
       } catch (error) {
-        results.push({ ...page, status: 'error', error: error.message });
+        results.push({ ...page, status: 'error', audit: full ? 'lighthouse' : 'html', performance, error: error.message });
         console.log(`error: ${error.message}`);
       }
     }
@@ -192,11 +261,17 @@ async function main() {
 
   await writeReports(reportDir, { ...manifest, lighthouseVersion: runner.version, result, pages: results });
 
-  console.log(`scangov: report written to ${reportDir} (${results.length} pages, ${failing} failing attributes in ${failOn.join(',')}, ${errored} page errors)`);
+  console.log(`scangov: report written to ${reportDir} (${results.length} pages, Lighthouse on ${lighthouseSet.size}, ${failing} failing attributes in ${failOn.join(',')}, ${errored} page errors)`);
   if (outcome === 'findings' && !blocking) {
     console.log('scangov: findings present, exiting 0 because --block is not set');
   }
   return exitCode;
+}
+
+function tierLabel(p, lighthouseSet, performanceSet) {
+  if (performanceSet.has(p)) return 'lighthouse+performance';
+  if (lighthouseSet.has(p)) return 'lighthouse';
+  return 'html';
 }
 
 /*

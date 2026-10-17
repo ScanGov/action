@@ -47,8 +47,11 @@ build step, published by GitHub Pages at `https://<org>.github.io/<repo>/`.
    The tag shown is the latest release, pinned exactly. See
    [Versions](docs/reference.md#versions).
 
-3. Push to `main`. The workflow audits every HTML page in the repository,
-   writes the report to the run's summary, and deploys.
+3. Push to `main`. The workflow checks every HTML page in the repository, runs
+   Lighthouse on a sample of them with the performance category on the
+   homepage, writes the report to the run's summary, and deploys. See
+   [which pages get Lighthouse](docs/reference.md#which-pages-get-lighthouse)
+   to change the sample.
 
 By default the audit reports and never holds up a deploy. When you are
 ready for it to gate the deploy, add one line under `with:`:

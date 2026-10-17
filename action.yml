@@ -20,12 +20,22 @@ inputs:
     description: The domain your pages already use in canonical links, og:url and the sitemap, for example www.example.gov. Used to resolve those URLs against the local tree. Never fetched.
     required: false
   pages:
-    description: Comma-separated list of paths to audit. Default is every HTML page in the tree.
+    description: Comma-separated list of paths to check. Default is every HTML page in the tree.
     required: false
   max-pages:
-    description: Upper bound on pages audited per run.
+    description: Upper bound on pages checked per run.
     required: false
     default: '200'
+  lighthouse-pages:
+    description: Comma-separated paths that get the full Lighthouse pass, or "all". Default is a deterministic sample of lighthouse-max-pages pages, the homepage, each section's landing page, then each section's first inner page. Every page is still checked from its HTML.
+    required: false
+  lighthouse-max-pages:
+    description: Size of the Lighthouse sample when lighthouse-pages is not set.
+    required: false
+    default: '10'
+  performance-pages:
+    description: Comma-separated paths that also run the Lighthouse performance category for a lab CLS reading, or "all" or "none". Default is the homepage.
+    required: false
   scangov-domain:
     description: Domain known to ScanGov. Enables a read-only lookup of production results for the host-dependent checks. Optional.
     required: false
@@ -36,10 +46,6 @@ inputs:
     description: Comma-separated ScanGov topics (accessibility, usability, botability, security, readability) whose failing attributes count as findings.
     required: false
     default: accessibility
-  with-cls:
-    description: Run the Lighthouse performance category to get a lab CLS reading.
-    required: false
-    default: 'false'
   block:
     description: Set to true to fail the job when there are findings, which blocks any job that depends on this one. Default is report only.
     required: false
@@ -89,10 +95,12 @@ runs:
         INPUT_CANONICAL_DOMAIN: ${{ inputs.canonical-domain }}
         INPUT_PAGES: ${{ inputs.pages }}
         INPUT_MAX_PAGES: ${{ inputs.max-pages }}
+        INPUT_LIGHTHOUSE_PAGES: ${{ inputs.lighthouse-pages }}
+        INPUT_LIGHTHOUSE_MAX_PAGES: ${{ inputs.lighthouse-max-pages }}
+        INPUT_PERFORMANCE_PAGES: ${{ inputs.performance-pages }}
         INPUT_SCANGOV_DOMAIN: ${{ inputs.scangov-domain }}
         INPUT_BASELINE: ${{ inputs.baseline }}
         INPUT_FAIL_ON: ${{ inputs.fail-on }}
-        INPUT_WITH_CLS: ${{ inputs.with-cls }}
         INPUT_BLOCK: ${{ inputs.block }}
         INPUT_REPORT_DIR: ${{ inputs.report-dir }}
         ACTION_PATH: ${{ github.action_path }}
@@ -105,10 +113,12 @@ runs:
         [ -n "$INPUT_CANONICAL_DOMAIN" ] && args+=(--canonical-domain "$INPUT_CANONICAL_DOMAIN")
         [ -n "$INPUT_PAGES" ] && args+=(--pages "$INPUT_PAGES")
         [ -n "$INPUT_MAX_PAGES" ] && args+=(--max-pages "$INPUT_MAX_PAGES")
+        [ -n "$INPUT_LIGHTHOUSE_PAGES" ] && args+=(--lighthouse-pages "$INPUT_LIGHTHOUSE_PAGES")
+        [ -n "$INPUT_LIGHTHOUSE_MAX_PAGES" ] && args+=(--lighthouse-max-pages "$INPUT_LIGHTHOUSE_MAX_PAGES")
+        [ -n "$INPUT_PERFORMANCE_PAGES" ] && args+=(--performance-pages "$INPUT_PERFORMANCE_PAGES")
         [ -n "$INPUT_SCANGOV_DOMAIN" ] && args+=(--scangov-domain "$INPUT_SCANGOV_DOMAIN")
         [ -n "$INPUT_BASELINE" ] && args+=(--baseline "$INPUT_BASELINE")
         [ -n "$INPUT_FAIL_ON" ] && args+=(--fail-on "$INPUT_FAIL_ON")
-        [ "$INPUT_WITH_CLS" = "true" ] && args+=(--with-cls)
         [ "$INPUT_BLOCK" = "true" ] && args+=(--block)
         args+=(--report-dir "$INPUT_REPORT_DIR")
         node "$ACTION_PATH/src/cli.mjs" "${args[@]}"

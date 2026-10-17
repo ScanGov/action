@@ -53,4 +53,5 @@ is empty rather than 0 or 100 for those pages.
   restricted to the production hostname. A missing favicon also shows up
   here, as a 404.
 - Lab CLS from a shared runner is a regression signal, not a production
-  number. It is off by default; enable it with `with-cls`.
+  number. It runs on the homepage by default; name other pages with
+  `performance-pages`.

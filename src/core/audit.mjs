@@ -1,6 +1,8 @@
 /*
 * Assemble one page's ScanGov audit from its Lighthouse result and its HTML,
-* then score it by topic. The merge mirrors ScanGov's production auditor:
+* then score it by topic. Without a Lighthouse result the audit is HTML-only:
+* the HTML-derived attributes are still recorded, but the four topics that
+* depend on Lighthouse are not given a score. The merge mirrors ScanGov's production auditor:
 * HTML-derived attributes are added to the Lighthouse-derived ones, the
 * readability topic's single attribute (reading-level) passes when the
 * Automated Readability Index rounds to 8 or below, pages with no measurable
@@ -33,8 +35,23 @@ export const GLOBAL_ATTRIBUTES = [
    nothing about production, so they are left out of the CI score. */
 export const HOST_DERIVED_ATTRIBUTES = ['https', 'hsts', 'csp', 'clickjacking-mitigation'];
 
+/* Topics whose attributes come (at least partly) from Lighthouse. */
+export const LIGHTHOUSE_TOPICS = ['accessibility', 'usability', 'botability', 'security'];
+
+function htmlOnlyAudit() {
+  return {
+    requestedUrl: null,
+    finalUrl: null,
+    partial: true,
+    accessibility: { attributes: {} },
+    security: { attributes: {} },
+    botability: { attributes: {} },
+    usability: { attributes: {} }
+  };
+}
+
 export function buildPageAudit({ lhr, html, performance = false }) {
-  let audit = composeFromLighthouse(lhr, { performance });
+  let audit = lhr ? composeFromLighthouse(lhr, { performance }) : htmlOnlyAudit();
   let page = analyzePageHtml(html || '');
 
   audit.title = page.title;
@@ -58,6 +75,7 @@ export function scorePageAudit(audit, { excludeHostDerived = true } = {}) {
   if (excludeHostDerived) exclude.push(...HOST_DERIVED_ATTRIBUTES);
   let scores = {};
   for (let topic of TOPICS) {
+    let measured = !audit.partial || !LIGHTHOUSE_TOPICS.includes(topic);
     let attributes = {};
     let all = 0;
     let correct = 0;
@@ -67,7 +85,7 @@ export function scorePageAudit(audit, { excludeHostDerived = true } = {}) {
       all++;
       if (value) correct++;
     }
-    scores[topic] = { attributes, all, correct, score: all > 0 ? Math.floor((correct / all) * 100) : null };
+    scores[topic] = { attributes, all, correct, score: measured && all > 0 ? Math.floor((correct / all) * 100) : null };
   }
   return scores;
 }

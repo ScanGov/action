@@ -46,6 +46,18 @@ on:
         description: ScanGov topics whose failing attributes count as findings.
         type: string
         default: accessibility
+      lighthouse-pages:
+        description: Paths that get the full Lighthouse pass, or "all". Default is a sample, see lighthouse-max-pages.
+        type: string
+        default: ''
+      lighthouse-max-pages:
+        description: Size of the Lighthouse sample. Every page is still checked from its HTML.
+        type: string
+        default: '10'
+      performance-pages:
+        description: Paths that also run the Lighthouse performance category for a lab CLS reading, or "all" or "none". Default is the homepage.
+        type: string
+        default: ''
       block:
         description: Set true to block the deploy when there are findings. Default deploys anyway and reports.
         type: boolean
@@ -73,6 +85,9 @@ jobs:
           base-path: ${{ inputs.base-path }}
           canonical-domain: ${{ inputs.canonical-domain }}
           fail-on: ${{ inputs.fail-on }}
+          lighthouse-pages: ${{ inputs.lighthouse-pages }}
+          lighthouse-max-pages: ${{ inputs.lighthouse-max-pages }}
+          performance-pages: ${{ inputs.performance-pages }}
           block: ${{ inputs.block }}
           node-version: ${{ inputs.node-version }}
       - uses: actions/upload-pages-artifact@v3

@@ -127,3 +127,16 @@ test('attribute descriptions come from audits.json', () => {
   assert.equal(describeAttribute('readability', 'reading-level').displayName, 'Reading level');
   assert.equal(describeAttribute('accessibility', 'no-such-thing').displayName, 'no-such-thing');
 });
+
+test('html-only audit scores readability and leaves the Lighthouse topics unscored', () => {
+  let html = '<!doctype html><html lang="en"><head><title>Parks</title><meta property="og:title" content="Parks"></head>'
+    + '<body><main><h1>Parks</h1><p>The park is open all day. Dogs are welcome on a leash. Bring water on hot days.</p></main></body></html>';
+  let audit = buildPageAudit({ lhr: null, html });
+  let scores = scorePageAudit(audit);
+  assert.equal(audit.partial, true);
+  for (let topic of ['accessibility', 'usability', 'botability', 'security']) assert.equal(scores[topic].score, null, topic);
+  assert.equal(typeof scores.readability.score, 'number');
+  assert.equal(scores.usability.attributes.ogtitle, true);
+  assert.equal(scores.usability.attributes.ogimage, false);
+  assert.equal(scores.botability.attributes.crawlable, true);
+});
