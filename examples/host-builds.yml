@@ -17,7 +17,7 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npm run build
-      - uses: ScanGov/action@v1.0.1
+      - uses: ScanGov/action@v1.0.3
         with:
           site-dir: dist
           canonical-domain: www.example.gov
