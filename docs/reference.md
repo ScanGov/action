@@ -71,7 +71,7 @@ running in the job, point at the server, name the page, and set `topics` to
 `none`. Only the performance category runs and the report is the lab table.
 
 ```yaml
-      - uses: ScanGov/action@v1.0.1
+      - uses: ScanGov/action@v1.0.3
         with:
           base-url: http://127.0.0.1:3000
           pages: /login/
@@ -101,7 +101,7 @@ accessibility and have this action cover the other four topics:
         with:
           base-url: http://127.0.0.1:3000
 
-      - uses: ScanGov/action@v1.0.1
+      - uses: ScanGov/action@v1.0.3
         with:
           base-url: http://127.0.0.1:3000
           pages: /,/services/,/contact/
@@ -133,7 +133,7 @@ The reusable workflow in the README covers GitHub Pages. To put the audit
 inside your own workflow:
 
 ```yaml
-- uses: ScanGov/action@v1.0.1
+- uses: ScanGov/action@v1.0.3
   with:
     site-dir: _site
     canonical-domain: www.example.gov
@@ -155,7 +155,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: scangov
-        uses: ScanGov/action@v1.0.1
+        uses: ScanGov/action@v1.0.3
         with:
           site-dir: .
 

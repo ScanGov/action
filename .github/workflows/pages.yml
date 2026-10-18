@@ -5,7 +5,7 @@
 #
 #   jobs:
 #     site:
-#       uses: ScanGov/action/.github/workflows/pages.yml@v1.0.1
+#       uses: ScanGov/action/.github/workflows/pages.yml@v1.0.3
 #       with:
 #         base-path: /my-repo/
 #         canonical-domain: my-org.github.io
@@ -83,7 +83,7 @@ jobs:
       - name: Build
         if: inputs.build-command != ''
         run: ${{ inputs.build-command }}
-      - uses: ScanGov/action@v1.0.1
+      - uses: ScanGov/action@v1.0.3
         with:
           site-dir: ${{ inputs.site-dir }}
           base-path: ${{ inputs.base-path }}

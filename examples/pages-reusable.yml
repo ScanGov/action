@@ -8,7 +8,7 @@ on:
 
 jobs:
   site:
-    uses: ScanGov/action/.github/workflows/pages.yml@v1.0.1
+    uses: ScanGov/action/.github/workflows/pages.yml@v1.0.3
     with:
       site-dir: .
       base-path: /my-repo/

@@ -1,6 +1,6 @@
 {
   "name": "scangov",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "Audit a static site against ScanGov standards inside CI, before it deploys.",
   "license": "MIT",
   "repository": "github:ScanGov/action",

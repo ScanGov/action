@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ScanGov/action@v1.0.1
+      - uses: ScanGov/action@v1.0.3
         with:
           site-dir: .
           base-path: /my-repo/

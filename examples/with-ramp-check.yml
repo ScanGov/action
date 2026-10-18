@@ -32,7 +32,7 @@ jobs:
       # Everything else ScanGov grades from the files. Accessibility is left
       # out of topics so Lighthouse skips that category and the report has
       # no second opinion on it.
-      - uses: ScanGov/action@v1.0.1
+      - uses: ScanGov/action@v1.0.3
         with:
           base-url: http://127.0.0.1:3000
           pages: /,/services/,/contact/

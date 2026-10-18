@@ -29,7 +29,7 @@ build step, published by GitHub Pages at `https://<org>.github.io/<repo>/`.
        branches: [main]
    jobs:
      site:
-       uses: ScanGov/action/.github/workflows/pages.yml@v1.0.1
+       uses: ScanGov/action/.github/workflows/pages.yml@v1.0.3
        with:
          site-dir: .
          base-path: /<repo>/
@@ -65,14 +65,14 @@ go back to report-only.
 
 ## Check only some topics
 
-Every input above also works in a plain step with `ScanGov/action@v1.0.1`.
+Every input above also works in a plain step with `ScanGov/action@v1.0.3`.
 If another tool already covers one of ScanGov's five topics, name the ones
 this action should handle. The report shows only those, and Lighthouse runs
 only the categories they need. Here an accessibility checker owns that topic
 and ScanGov covers the rest, failing on reading level:
 
 ```yaml
-      - uses: ScanGov/action@v1.0.1
+      - uses: ScanGov/action@v1.0.3
         with:
           site-dir: _site
           canonical-domain: www.example.gov
@@ -85,7 +85,7 @@ login screen of an app running in the job, name the page and set `topics`
 to `none`:
 
 ```yaml
-      - uses: ScanGov/action@v1.0.1
+      - uses: ScanGov/action@v1.0.3
         with:
           base-url: http://127.0.0.1:3000
           pages: /login/
