@@ -38,6 +38,25 @@ export const HOST_DERIVED_ATTRIBUTES = ['https', 'hsts', 'csp', 'clickjacking-mi
 /* Topics whose attributes come (at least partly) from Lighthouse. */
 export const LIGHTHOUSE_TOPICS = ['accessibility', 'usability', 'botability', 'security'];
 
+/* Which Lighthouse categories each topic's attributes are read from.
+   doctype, charset and image-aspect-ratio sit in best-practices even though
+   ScanGov files them under accessibility. Readability needs no Lighthouse. */
+export const LIGHTHOUSE_CATEGORIES = {
+  accessibility: ['accessibility', 'best-practices'],
+  usability: ['seo'],
+  botability: ['seo'],
+  security: ['best-practices']
+};
+
+/* The Lighthouse categories a run needs for the given topics, in Lighthouse's
+   own order. Empty when none of the topics is Lighthouse-derived, in which
+   case no browser is needed at all. */
+export function lighthouseCategoriesFor(topics) {
+  let wanted = new Set();
+  for (let t of topics) for (let c of LIGHTHOUSE_CATEGORIES[t] || []) wanted.add(c);
+  return ['accessibility', 'best-practices', 'seo'].filter(c => wanted.has(c));
+}
+
 function htmlOnlyAudit() {
   return {
     requestedUrl: null,

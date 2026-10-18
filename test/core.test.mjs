@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { composeFromLighthouse } from '../src/core/compose.mjs';
 import { analyzePageHtml } from '../src/core/page-html.mjs';
 import { readingLevelFromInfo, countSyllables, analyzeText } from '../src/core/readability.mjs';
-import { buildPageAudit, scorePageAudit, TOPICS, HOST_DERIVED_ATTRIBUTES, describeAttribute } from '../src/core/audit.mjs';
+import { buildPageAudit, scorePageAudit, lighthouseCategoriesFor, TOPICS, HOST_DERIVED_ATTRIBUTES, describeAttribute } from '../src/core/audit.mjs';
+import { labPerformance } from '../src/lighthouse.mjs';
 
 const lhr = JSON.parse(readFileSync(new URL('../fixtures/lhr/about.json', import.meta.url), 'utf8'));
 const aboutHtml = readFileSync(new URL('../fixtures/site/about/index.html', import.meta.url), 'utf8');
@@ -139,4 +140,39 @@ test('html-only audit scores readability and leaves the Lighthouse topics unscor
   assert.equal(scores.usability.attributes.ogtitle, true);
   assert.equal(scores.usability.attributes.ogimage, false);
   assert.equal(scores.botability.attributes.crawlable, true);
+});
+
+test('lighthouse categories follow the topics', () => {
+  assert.deepEqual(lighthouseCategoriesFor(TOPICS), ['accessibility', 'best-practices', 'seo']);
+  assert.deepEqual(lighthouseCategoriesFor(['usability', 'botability', 'security', 'readability']), ['best-practices', 'seo']);
+  assert.deepEqual(lighthouseCategoriesFor(['accessibility']), ['accessibility', 'best-practices']);
+  assert.deepEqual(lighthouseCategoriesFor(['botability']), ['seo']);
+  assert.deepEqual(lighthouseCategoriesFor(['readability']), []);
+  assert.deepEqual(lighthouseCategoriesFor([]), []);
+});
+
+test('lab performance readings are rounded and never scored', () => {
+  let perf = {
+    categories: { performance: { score: 0.874 } },
+    audits: {
+      'first-contentful-paint': { numericValue: 1234.56 },
+      'largest-contentful-paint': { numericValue: 2500.4 },
+      'cumulative-layout-shift': { numericValue: 0.04567 },
+      'total-blocking-time': { numericValue: 12.2 },
+      'speed-index': { numericValue: 1500 },
+      'server-response-time': { numericValue: 80.5 }
+    }
+  };
+  assert.deepEqual(labPerformance(perf), {
+    score: 87,
+    'first-contentful-paint': 1235,
+    'largest-contentful-paint': 2500,
+    'cumulative-layout-shift': 0.046,
+    'total-blocking-time': 12,
+    'speed-index': 1500,
+    'server-response-time': 81
+  });
+  let empty = labPerformance(lhr);
+  assert.equal(empty.score, null);
+  assert.equal(empty['largest-contentful-paint'], null);
 });

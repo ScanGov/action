@@ -4,9 +4,12 @@
 *
 * Flags mirror ScanGov's production auditor: headless Chrome, the
 * ScanGovBot emulated user agent, no CPU slowdown, a 30 second load wait,
-* audioeye blocked, and only the accessibility, best-practices and seo
-* categories. The performance category is added per page on request: it
-* adds a throttled trace, and only the lab CLS reading from it is used.
+* audioeye blocked, and by default only the accessibility, best-practices
+* and seo categories. The caller names the categories a run needs, which
+* lets a topic that another tool covers (accessibility, say) be left out.
+* The performance category is added per page on request: it adds a
+* throttled trace, the lab CLS reading joins the usability score, and the
+* other lab metrics are reported without being scored.
 */
 
 import lighthouse from 'lighthouse';
@@ -23,6 +26,29 @@ const CHROME_FLAGS = [
   '--disable-dev-shm-usage',
   '--disable-gpu'
 ];
+
+export const DEFAULT_CATEGORIES = ['accessibility', 'best-practices', 'seo'];
+
+/*
+* Lab performance readings from a result that ran the performance category.
+* Reported, never scored: a shared runner's timings are a regression signal
+* between runs of the same site, not a production number. Times in ms.
+*/
+export function labPerformance(lhr) {
+  let audits = lhr?.audits || {};
+  let ms = id => (typeof audits[id]?.numericValue === 'number' ? Math.round(audits[id].numericValue) : null);
+  let score = lhr?.categories?.performance?.score;
+  let cls = audits['cumulative-layout-shift']?.numericValue;
+  return {
+    score: typeof score === 'number' ? Math.round(score * 100) : null,
+    'first-contentful-paint': ms('first-contentful-paint'),
+    'largest-contentful-paint': ms('largest-contentful-paint'),
+    'cumulative-layout-shift': typeof cls === 'number' ? Math.round(cls * 1000) / 1000 : null,
+    'total-blocking-time': ms('total-blocking-time'),
+    'speed-index': ms('speed-index'),
+    'server-response-time': ms('server-response-time')
+  };
+}
 
 export class LighthouseRunner {
   constructor() {
@@ -41,10 +67,11 @@ export class LighthouseRunner {
     }
   }
 
-  async audit(url, { performance = false } = {}) {
+  async audit(url, { categories = DEFAULT_CATEGORIES, performance = false } = {}) {
     if (!this.chrome) throw new Error('runner not started');
-    let categories = ['accessibility', 'best-practices', 'seo'];
-    if (performance) categories.push('performance');
+    categories = [...categories];
+    if (performance && !categories.includes('performance')) categories.push('performance');
+    if (categories.length === 0) throw new Error('no Lighthouse categories to run');
     let result = await lighthouse(url, {
       port: this.chrome.port,
       output: 'json',

@@ -52,6 +52,10 @@ is empty rather than 0 or 100 for those pages.
 - `errors-in-console` can fire for third-party scripts whose keys are
   restricted to the production hostname. A missing favicon also shows up
   here, as a 404.
-- Lab CLS from a shared runner is a regression signal, not a production
-  number. It runs on the homepage by default; name other pages with
-  `performance-pages`.
+- Lab performance from a shared runner is a regression signal, not a
+  production number. Only the CLS reading is scored; the timings are
+  reported on their own. It runs on the homepage by default; name other
+  pages with `performance-pages`.
+- If another tool in the workflow already covers a topic, name the others
+  in `topics` and this report leaves that one out. See
+  [Running alongside another tool](reference.md#running-alongside-another-tool).

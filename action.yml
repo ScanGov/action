@@ -34,7 +34,10 @@ inputs:
     required: false
     default: '10'
   performance-pages:
-    description: Comma-separated paths that also run the Lighthouse performance category for a lab CLS reading, or "all" or "none". Default is the homepage.
+    description: Comma-separated paths that also run the Lighthouse performance category for a lab CLS reading and report-only lab timings, or "all" or "none". Default is the homepage when Lighthouse runs at all.
+    required: false
+  topics:
+    description: Comma-separated ScanGov topics to check and report (accessibility, usability, botability, security, readability). Default is all five. Leave out a topic another tool in your workflow covers; Lighthouse then skips the categories only that topic needs. "none" with performance-pages runs the performance category alone.
     required: false
   scangov-domain:
     description: Domain known to ScanGov. Enables a read-only lookup of production results for the host-dependent checks. Optional.
@@ -43,9 +46,9 @@ inputs:
     description: Path to a baseline file of accepted findings.
     required: false
   fail-on:
-    description: Comma-separated ScanGov topics (accessibility, usability, botability, security, readability) whose failing attributes count as findings.
+    description: Comma-separated ScanGov topics whose failing attributes count as findings, or "none". Must be among topics. Default is accessibility when it is among the topics, otherwise none.
     required: false
-    default: accessibility
+    default: ''
   block:
     description: Set to true to fail the job when there are findings, which blocks any job that depends on this one. Default is report only.
     required: false
@@ -98,6 +101,7 @@ runs:
         INPUT_LIGHTHOUSE_PAGES: ${{ inputs.lighthouse-pages }}
         INPUT_LIGHTHOUSE_MAX_PAGES: ${{ inputs.lighthouse-max-pages }}
         INPUT_PERFORMANCE_PAGES: ${{ inputs.performance-pages }}
+        INPUT_TOPICS: ${{ inputs.topics }}
         INPUT_SCANGOV_DOMAIN: ${{ inputs.scangov-domain }}
         INPUT_BASELINE: ${{ inputs.baseline }}
         INPUT_FAIL_ON: ${{ inputs.fail-on }}
@@ -116,6 +120,7 @@ runs:
         [ -n "$INPUT_LIGHTHOUSE_PAGES" ] && args+=(--lighthouse-pages "$INPUT_LIGHTHOUSE_PAGES")
         [ -n "$INPUT_LIGHTHOUSE_MAX_PAGES" ] && args+=(--lighthouse-max-pages "$INPUT_LIGHTHOUSE_MAX_PAGES")
         [ -n "$INPUT_PERFORMANCE_PAGES" ] && args+=(--performance-pages "$INPUT_PERFORMANCE_PAGES")
+        [ -n "$INPUT_TOPICS" ] && args+=(--topics "$INPUT_TOPICS")
         [ -n "$INPUT_SCANGOV_DOMAIN" ] && args+=(--scangov-domain "$INPUT_SCANGOV_DOMAIN")
         [ -n "$INPUT_BASELINE" ] && args+=(--baseline "$INPUT_BASELINE")
         [ -n "$INPUT_FAIL_ON" ] && args+=(--fail-on "$INPUT_FAIL_ON")

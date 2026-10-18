@@ -4,9 +4,10 @@
 *
 * Serves a built site on 127.0.0.1 and checks every HTML page from its
 * markup (social tags, language, readability). A deterministic sample of
-* pages, or the pages you name, also gets a full Lighthouse pass with the
-* same flags ScanGov's production auditor uses, and the homepage (by
-* default) adds the performance category for a lab CLS reading. Writes JSON
+* pages, or the pages you name, also gets a Lighthouse pass with the same
+* flags ScanGov's production auditor uses, running only the categories the
+* chosen topics need, and the homepage (by default) adds the performance
+* category for a lab CLS reading plus report-only lab timings. Writes JSON
 * and Markdown reports. Nothing is reachable from outside the runner and no
 * page content leaves it.
 *
@@ -19,9 +20,9 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { serve } from './serve.mjs';
 import { enumerateSite, sampleLighthousePages } from './pages.mjs';
-import { LighthouseRunner } from './lighthouse.mjs';
+import { LighthouseRunner, labPerformance } from './lighthouse.mjs';
 import { writeReports } from './report.mjs';
-import { buildPageAudit, scorePageAudit, TOPICS } from './core/audit.mjs';
+import { buildPageAudit, scorePageAudit, lighthouseCategoriesFor, TOPICS } from './core/audit.mjs';
 
 const EXIT_CLEAN = 0;
 const EXIT_FINDINGS = 1;
@@ -39,10 +40,16 @@ const USAGE = `Usage: scangov (--site-dir <dir> | --base-url <url>) [options]
                               (default: a sample of --lighthouse-max-pages pages)
   --lighthouse-max-pages <n>  Size of the Lighthouse sample (default 10)
   --performance-pages <a,b,c> Paths that also run the performance category for a
-                              lab CLS reading, "all" or "none" (default: the homepage)
+                              lab CLS reading and lab timings, "all" or "none"
+                              (default: the homepage, when Lighthouse runs at all)
+  --topics <a,b,c>            Topics to check and report (default: all five). Leave
+                              out a topic another tool covers; Lighthouse then skips
+                              the categories only that topic needs. "none" with
+                              --performance-pages runs the performance category alone
   --scangov-domain <host>     Domain known to ScanGov, enables production lookup
   --baseline <file>           Accepted findings file
-  --fail-on <topics>          Topics whose failing attributes count as findings (default accessibility)
+  --fail-on <topics>          Topics whose failing attributes count as findings, or
+                              "none" (default: accessibility when it is among --topics)
   --block                     Exit 1 on findings (default: report only, exit 0)
   --report-dir <dir>          Where to write reports (default scangov-report)
   --dry-run                   Serve and list pages by tier, skip Lighthouse
@@ -66,6 +73,14 @@ function splitPaths(value) {
   return value.split(',').map(p => p.trim()).filter(Boolean).map(p => (p.startsWith('/') ? p : '/' + p));
 }
 
+function splitTopics(value, flag) {
+  let names = value.split(',').map(t => t.trim()).filter(Boolean);
+  for (let t of names) {
+    if (!TOPICS.includes(t)) fail(`${flag} topic "${t}" is not one of ${TOPICS.join(', ')}`);
+  }
+  return TOPICS.filter(t => names.includes(t));
+}
+
 function positiveInt(value, flag) {
   let n = parseInt(value, 10);
   if (!Number.isFinite(n) || n < 1) fail(`${flag} must be a positive integer`);
@@ -85,9 +100,10 @@ async function main() {
       'lighthouse-max-pages': { type: 'string', default: '10' },
       'performance-pages': { type: 'string' },
       'with-cls': { type: 'boolean', default: false }, // deprecated alias for --performance-pages all
+      'topics': { type: 'string' },
       'scangov-domain': { type: 'string' },
       'baseline': { type: 'string' },
-      'fail-on': { type: 'string', default: 'accessibility' },
+      'fail-on': { type: 'string' },
       'block': { type: 'boolean', default: false },
       'report-dir': { type: 'string', default: 'scangov-report' },
       'dry-run': { type: 'boolean', default: false },
@@ -96,15 +112,28 @@ async function main() {
     strict: true,
     allowNegative: true
   });
-  let blocking = args.block;
-  let failOn = args['fail-on'].split(',').map(t => t.trim()).filter(Boolean);
-  for (let t of failOn) {
-    if (!TOPICS.includes(t)) fail(`--fail-on topic "${t}" is not one of ${TOPICS.join(', ')}`);
-  }
-
   if (args.help) {
     console.log(USAGE);
     return EXIT_CLEAN;
+  }
+
+  let blocking = args.block;
+
+  // Which ScanGov topics this run checks. Leaving one out drops it from the
+  // report and from the Lighthouse run, so a site that gets accessibility
+  // from another tool is not told twice.
+  let topics;
+  if (args.topics === undefined) topics = TOPICS;
+  else if (args.topics.trim() === 'none') topics = [];
+  else topics = splitTopics(args.topics, '--topics');
+  if (topics.length === 0 && args.topics.trim() !== 'none') fail('--topics names no topics');
+
+  let failOn;
+  if (args['fail-on'] === undefined) failOn = topics.includes('accessibility') ? ['accessibility'] : [];
+  else if (args['fail-on'].trim() === 'none') failOn = [];
+  else failOn = splitTopics(args['fail-on'], '--fail-on');
+  for (let t of failOn) {
+    if (!topics.includes(t)) fail(`--fail-on topic "${t}" is not among --topics (${topics.join(', ')})`);
   }
 
   let siteDir = args['site-dir'];
@@ -147,16 +176,25 @@ async function main() {
     pagePaths = pagePaths.slice(0, maxPages);
   }
 
-  // Which pages get the full Lighthouse pass. Pages named explicitly are
+  // Which Lighthouse categories the chosen topics need. Readability alone
+  // needs none, and then no page gets the topic pass at all.
+  let categories = lighthouseCategoriesFor(topics);
+
+  // Which pages get the Lighthouse topic pass. Pages named explicitly are
   // audited even if the tree did not list them.
   let lighthouseArg = args['lighthouse-pages'];
   let lighthousePaths;
-  if (lighthouseArg === 'all') lighthousePaths = [...pagePaths];
+  if (categories.length === 0) {
+    if (lighthouseArg) console.warn(`scangov: --lighthouse-pages ignored, none of the topics (${topics.join(', ')}) needs Lighthouse`);
+    lighthousePaths = [];
+  } else if (lighthouseArg === 'all') lighthousePaths = [...pagePaths];
   else if (lighthouseArg) lighthousePaths = splitPaths(lighthouseArg);
   else lighthousePaths = sampleLighthousePages(pagePaths, { max: lighthouseMax });
   for (let p of lighthousePaths) if (!pagePaths.includes(p)) pagePaths.push(p);
 
-  // Which of those also run the performance category.
+  // Which pages run the performance category. It is independent of the
+  // topics: a readability-only run can still name pages here, and then
+  // Lighthouse runs the performance category alone on them.
   let performanceArg = args['performance-pages'];
   if (args['with-cls']) {
     console.warn('scangov: --with-cls is deprecated, use --performance-pages all');
@@ -165,14 +203,16 @@ async function main() {
   let performancePaths;
   if (performanceArg === undefined) performancePaths = lighthousePaths.includes('/') ? ['/'] : [];
   else if (performanceArg === 'none' || performanceArg === '') performancePaths = [];
-  else if (performanceArg === 'all') performancePaths = [...lighthousePaths];
+  else if (performanceArg === 'all') performancePaths = lighthousePaths.length > 0 ? [...lighthousePaths] : [...pagePaths];
   else performancePaths = splitPaths(performanceArg);
   for (let p of performancePaths) {
-    if (!lighthousePaths.includes(p)) lighthousePaths.push(p);
+    if (categories.length > 0 && !lighthousePaths.includes(p)) lighthousePaths.push(p);
     if (!pagePaths.includes(p)) pagePaths.push(p);
   }
+  if (topics.length === 0 && performancePaths.length === 0) fail('--topics none needs --performance-pages, otherwise there is nothing to check');
   let lighthouseSet = new Set(lighthousePaths);
   let performanceSet = new Set(performancePaths);
+  let browserRuns = new Set([...lighthousePaths, ...performancePaths]).size;
 
   let pages = pagePaths.map(p => {
     let rel = p.slice(1);
@@ -185,14 +225,16 @@ async function main() {
     basePath,
     canonicalDomain,
     blocking,
+    topics,
+    lighthouseCategories: categories,
     lighthousePages: lighthousePaths,
-    lighthouseSample: lighthouseArg ? null : lighthouseMax,
+    lighthouseSample: lighthouseArg || categories.length === 0 ? null : lighthouseMax,
     performancePages: performancePaths,
     pages
   };
   await writeFile(path.join(reportDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
-  console.log(`scangov: ${pages.length} page(s), Lighthouse on ${lighthouseSet.size}, performance category on ${performanceSet.size}`);
+  console.log(`scangov: ${pages.length} page(s), topics ${topics.join(',') || 'none'}, Lighthouse on ${lighthouseSet.size}, performance category on ${performanceSet.size}`);
   if (args['dry-run']) {
     for (let p of pages) console.log(`  ${tierLabel(p.path, lighthouseSet, performanceSet).padEnd(22)} ${p.url}`);
     await server?.close();
@@ -202,7 +244,7 @@ async function main() {
   let runner = new LighthouseRunner();
   let results = [];
   try {
-    if (lighthouseSet.size > 0) {
+    if (browserRuns > 0) {
       await runner.start();
       await mkdir(path.join(reportDir, 'lhr'), { recursive: true });
     }
@@ -212,15 +254,21 @@ async function main() {
       process.stdout.write(`scangov: ${full ? 'auditing' : 'checking'} ${page.path} ... `);
       try {
         let html = await fetchHtml(page.url);
-        let lhr = full ? await runner.audit(page.url, { performance }) : null;
-        if (lhr) await writeFile(path.join(reportDir, 'lhr', slug(page.path) + '.json'), JSON.stringify(lhr));
-        let audit = buildPageAudit({ lhr, html, performance });
-        if (performance) {
-          // Only the layout-shift reading is meaningful on a runner; the
-          // other lab timings are dropped rather than reported as failures.
+        let lhr = null;
+        if (full || performance) {
+          lhr = await runner.audit(page.url, { categories: full ? categories : [], performance });
+          await writeFile(path.join(reportDir, 'lhr', slug(page.path) + '.json'), JSON.stringify(lhr));
+        }
+        // A performance-only result has none of the topic audits in it, so
+        // the topic audit is built from the HTML alone in that case.
+        let audit = buildPageAudit({ lhr: full ? lhr : null, html, performance: full && performance });
+        if (full && performance) {
+          // Only the layout-shift reading joins the score; the other lab
+          // timings are reported below rather than counted as failures.
           for (let k of ['fcp', 'lcp', 'ttfb', 'inp']) delete audit.usability.attributes[k];
         }
-        let scores = scorePageAudit(audit);
+        let lab = performance && lhr ? labPerformance(lhr) : null;
+        let scores = pick(scorePageAudit(audit), topics);
         let readability = audit.readabilityInfo?.words
           ? { ari: round1(audit.readabilityInfo.automatedReadabilityIndex), fleschKincaidGrade: audit.readabilityInfo.fleschKincaidGrade, words: audit.readabilityInfo.words, sentences: audit.readabilityInfo.sentences }
           : null;
@@ -233,9 +281,12 @@ async function main() {
           lang: audit.lang,
           scores,
           readability,
-          attributes: Object.fromEntries(TOPICS.map(t => [t, audit[t].attributes]))
+          lab,
+          attributes: Object.fromEntries(topics.map(t => [t, audit[t].attributes]))
         });
-        console.log(TOPICS.map(t => `${t} ${scores[t].score ?? '-'}`).join(', ') + (full ? '' : ' (html only)'));
+        let parts = topics.map(t => `${t} ${scores[t].score ?? '-'}`);
+        if (lab?.score != null) parts.push(`lab performance ${lab.score}`);
+        console.log(parts.join(', ') + (full ? '' : ' (html only)'));
       } catch (error) {
         results.push({ ...page, status: 'error', audit: full ? 'lighthouse' : 'html', performance, error: error.message });
         console.log(`error: ${error.message}`);
@@ -261,7 +312,7 @@ async function main() {
 
   await writeReports(reportDir, { ...manifest, lighthouseVersion: runner.version, result, pages: results });
 
-  console.log(`scangov: report written to ${reportDir} (${results.length} pages, Lighthouse on ${lighthouseSet.size}, ${failing} failing attributes in ${failOn.join(',')}, ${errored} page errors)`);
+  console.log(`scangov: report written to ${reportDir} (${results.length} pages, Lighthouse on ${browserRuns}, ${failing} failing attributes in ${failOn.join(',') || 'no topic'}, ${errored} page errors)`);
   if (outcome === 'findings' && !blocking) {
     console.log('scangov: findings present, exiting 0 because --block is not set');
   }
@@ -269,9 +320,14 @@ async function main() {
 }
 
 function tierLabel(p, lighthouseSet, performanceSet) {
-  if (performanceSet.has(p)) return 'lighthouse+performance';
+  if (lighthouseSet.has(p) && performanceSet.has(p)) return 'lighthouse+performance';
   if (lighthouseSet.has(p)) return 'lighthouse';
+  if (performanceSet.has(p)) return 'html+performance';
   return 'html';
+}
+
+function pick(object, keys) {
+  return Object.fromEntries(keys.map(k => [k, object[k]]));
 }
 
 /*

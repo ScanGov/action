@@ -63,6 +63,40 @@ ready for it to gate the deploy, add one line under `with:`:
 From then on a deploy only happens after a clean audit. Remove the line to
 go back to report-only.
 
+## Check only some topics
+
+Every input above also works in a plain step with `ScanGov/action@v1.0.1`.
+If another tool already covers one of ScanGov's five topics, name the ones
+this action should handle. The report shows only those, and Lighthouse runs
+only the categories they need. Here an accessibility checker owns that topic
+and ScanGov covers the rest, failing on reading level:
+
+```yaml
+      - uses: ScanGov/action@v1.0.1
+        with:
+          site-dir: _site
+          canonical-domain: www.example.gov
+          topics: usability,botability,security,readability
+          fail-on: readability
+```
+
+To watch the performance of one page and nothing else, for example the
+login screen of an app running in the job, name the page and set `topics`
+to `none`:
+
+```yaml
+      - uses: ScanGov/action@v1.0.1
+        with:
+          base-url: http://127.0.0.1:3000
+          pages: /login/
+          performance-pages: /login/
+          topics: none
+```
+
+Details, including the full ramp-check pairing:
+[Running alongside another tool](docs/reference.md#running-alongside-another-tool)
+and [Lab performance](docs/reference.md#lab-performance).
+
 ## Other setups
 
 - [Sites with a build step](docs/build-step.md): Eleventy, Astro, Hugo,

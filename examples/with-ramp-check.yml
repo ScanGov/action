@@ -1,0 +1,42 @@
+# Two tools, no overlap: ramp-check owns accessibility, ScanGov covers the
+# other four topics against a site that is already running in the job.
+# Both write to the job summary; ramp-check also comments on the PR.
+
+name: Audit
+
+on:
+  pull_request:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build and serve
+        run: |
+          npm ci
+          npm run build
+          npx http-server dist -p 3000 --silent &
+          npx wait-on http://127.0.0.1:3000
+
+      # Accessibility: axe plus motion, keyboard, reflow and consistency.
+      # Needs a ramp-check.config.js in the repo; see its README.
+      - uses: Mayor-s-Office-of-Innovation/ramp-check/action@main
+        with:
+          base-url: http://127.0.0.1:3000
+
+      # Everything else ScanGov grades from the files. Accessibility is left
+      # out of topics so Lighthouse skips that category and the report has
+      # no second opinion on it.
+      - uses: ScanGov/action@v1.0.1
+        with:
+          base-url: http://127.0.0.1:3000
+          pages: /,/services/,/contact/
+          canonical-domain: www.example.gov
+          topics: usability,botability,security,readability
+          fail-on: readability
+          performance-pages: /

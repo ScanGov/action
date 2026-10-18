@@ -42,10 +42,14 @@ on:
         description: Node.js version for the build and the audit.
         type: string
         default: '22'
-      fail-on:
-        description: ScanGov topics whose failing attributes count as findings.
+      topics:
+        description: ScanGov topics to check and report. Default is all five. Leave out one another tool covers, or "none" with performance-pages for performance alone.
         type: string
-        default: accessibility
+        default: ''
+      fail-on:
+        description: ScanGov topics whose failing attributes count as findings, or "none". Default is accessibility when it is among the topics.
+        type: string
+        default: ''
       lighthouse-pages:
         description: Paths that get the full Lighthouse pass, or "all". Default is a sample, see lighthouse-max-pages.
         type: string
@@ -55,7 +59,7 @@ on:
         type: string
         default: '10'
       performance-pages:
-        description: Paths that also run the Lighthouse performance category for a lab CLS reading, or "all" or "none". Default is the homepage.
+        description: Paths that also run the Lighthouse performance category for a lab CLS reading and lab timings, or "all" or "none". Default is the homepage.
         type: string
         default: ''
       block:
@@ -84,6 +88,7 @@ jobs:
           site-dir: ${{ inputs.site-dir }}
           base-path: ${{ inputs.base-path }}
           canonical-domain: ${{ inputs.canonical-domain }}
+          topics: ${{ inputs.topics }}
           fail-on: ${{ inputs.fail-on }}
           lighthouse-pages: ${{ inputs.lighthouse-pages }}
           lighthouse-max-pages: ${{ inputs.lighthouse-max-pages }}
